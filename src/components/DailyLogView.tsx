@@ -17,7 +17,7 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { StudyDay, ErrorRecord, ExamFocus, DayType, ErrorType, ConfidenceLevel } from '../types';
-import { NOTEBOOK_PHOTO_PRESETS, CANONICAL_CURRICULUM } from '../data/seedData';
+import { CANONICAL_CURRICULUM } from '../data/seedData';
 
 interface DailyLogViewProps {
   studyDays: StudyDay[];
@@ -60,10 +60,10 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
   const [guessedQuestions, setGuessedQuestions] = useState('2');
 
   // Notebook upload / extraction
-  const [selectedPresetId, setSelectedPresetId] = useState(NOTEBOOK_PHOTO_PRESETS[0].id);
   const [uploadedImageBase64, setUploadedImageBase64] = useState<string | null>(null);
   const [rawTextNote, setRawTextNote] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionError, setExtractionError] = useState('');
   
   // Confirmed / editable extracted records (Human review stage)
   const [extractedErrors, setExtractedErrors] = useState<ErrorRecord[]>([]);
@@ -77,7 +77,7 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
       const reader = new FileReader();
       reader.onloadend = () => {
         setUploadedImageBase64(reader.result as string);
-        setSelectedPresetId('');
+        setExtractionError('');
       };
       reader.readAsDataURL(file);
     }
@@ -86,15 +86,20 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
   // Run AI Extraction (Stage A of Pipeline)
   const handleRunAiExtraction = async () => {
     setIsExtracting(true);
+    setExtractionError('');
     try {
       const payload: any = {};
       if (uploadedImageBase64) {
         payload.imageBase64 = uploadedImageBase64;
-      } else if (selectedPresetId) {
-        payload.presetId = selectedPresetId;
       }
       if (rawTextNote) {
         payload.rawTextNote = rawTextNote;
+      }
+
+      if (!uploadedImageBase64 && !rawTextNote) {
+        setExtractionError('Please upload a notebook photo or type notes before extracting.');
+        setIsExtracting(false);
+        return;
       }
 
       const res = await fetch('/api/extract-errors', {
@@ -103,12 +108,14 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
         body: JSON.stringify(payload)
       });
       const data = await res.json();
-      if (data.records) {
+      if (res.ok && data.records) {
         setExtractedErrors(data.records);
         setHasExtracted(true);
+      } else {
+        setExtractionError(data.error || 'Extraction failed. Make sure your OCR API Key is configured in AI Setup.');
       }
-    } catch (err) {
-      console.error('Extraction error:', err);
+    } catch (err: any) {
+      setExtractionError(err.message || 'Network error during AI extraction');
     } finally {
       setIsExtracting(false);
     }
@@ -165,7 +172,7 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
         questionsWrong: parseInt(questionsWrong, 10) || 0,
         questionsSkipped: parseInt(questionsSkipped, 10) || 0,
         guessedQuestions: parseInt(guessedQuestions, 10) || 0,
-        notebookImages: uploadedImageBase64 ? [uploadedImageBase64] : (selectedPresetId ? [selectedPresetId] : []),
+        notebookImages: uploadedImageBase64 ? [uploadedImageBase64] : [],
         errorRecords: extractedErrors,
         feedbackLoopEnabledOnSubmit: feedbackLoopEnabled
       });
@@ -175,6 +182,7 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
       setExtractedErrors([]);
       setRawTextNote('');
       setUploadedImageBase64(null);
+      setExtractionError('');
     } catch (err) {
       console.error('Failed to save day:', err);
     } finally {
@@ -607,34 +615,42 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
                   </button>
                 </div>
 
-                {/* Photo Preset Selector & Upload */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
+                {/* Photo Upload and Capture */}
+                <div className="space-y-3 font-mono text-xs">
                   <div>
-                    <label className="text-slate-400 block mb-1">Select Preset Sample Notebook Page:</label>
-                    <select
-                      value={selectedPresetId}
-                      onChange={(e) => {
-                        setSelectedPresetId(e.target.value);
-                        setUploadedImageBase64(null);
-                      }}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-200 focus:border-cyan-500 focus:outline-none"
-                    >
-                      {NOTEBOOK_PHOTO_PRESETS.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-slate-400 block mb-1">Or Upload Custom Photo / Camera:</label>
+                    <label className="text-slate-400 block mb-1">Upload Notebook Mistake Photo (or take photo):</label>
                     <input
                       type="file"
                       accept="image/*"
                       onChange={handleImageFileChange}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-1.5 text-slate-300 text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-cyan-300 hover:file:bg-slate-700"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-300 text-xs file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-cyan-300 hover:file:bg-slate-700"
                     />
                   </div>
+
+                  {uploadedImageBase64 && (
+                    <div className="relative inline-block border border-slate-700 rounded-lg overflow-hidden bg-slate-900">
+                      <img 
+                        src={uploadedImageBase64} 
+                        alt="Uploaded notebook page" 
+                        className="max-h-36 max-w-full object-contain rounded" 
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setUploadedImageBase64(null)}
+                        className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-black/70 text-slate-300 hover:text-rose-400 text-[10px]"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
                 </div>
+
+                {extractionError && (
+                  <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs font-mono flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span>{extractionError}</span>
+                  </div>
+                )}
 
                 {/* Optional free-text handwritten transcription */}
                 <div>

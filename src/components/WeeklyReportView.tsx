@@ -86,8 +86,29 @@ export const WeeklyReportView: React.FC<WeeklyReportViewProps> = ({
         )}
       </div>
 
-      {/* Side-by-Side: Measured Ground Truth vs AI Analytical Inferences (Section 33 Spec) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Empty State when no report is generated yet */}
+      {!report ? (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-8 text-center space-y-4">
+          <Cpu className="w-12 h-12 text-purple-400/60 mx-auto" />
+          <h3 className="text-lg font-bold text-white font-mono">No AI Report Synthesized Yet for {currentWeek.id}</h3>
+          <p className="text-xs font-mono text-slate-400 max-w-lg mx-auto leading-relaxed">
+            Once you log daily preparation sessions and mistake reflections, click "Run Fresh AI Synthesis" to generate evidence-grounded diagnoses, failure mechanism analysis, and a testable Next Week Experiment.
+          </p>
+          <div className="pt-2 flex justify-center gap-3 font-mono text-xs">
+            <button
+              onClick={onRegenerateReport}
+              disabled={isGenerating}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold flex items-center gap-2 shadow-lg shadow-purple-900/30 transition-all disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
+              {isGenerating ? 'Synthesizing...' : 'Synthesize Cycle Report'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Side-by-Side: Measured Ground Truth vs AI Analytical Inferences (Section 33 Spec) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Left: MEASURED (Programmatic Ground Truth) */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
@@ -330,6 +351,8 @@ export const WeeklyReportView: React.FC<WeeklyReportViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
 
     </div>

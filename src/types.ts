@@ -217,3 +217,16 @@ export interface SystemAnalytics {
   cetQuestionsPerHour: number;
   chapterMetrics: ChapterMetric[];
 }
+
+export interface AISetupConfig {
+  ocrProvider: 'gemini' | 'openai_compatible';
+  ocrApiKey: string;
+  ocrModel: string;
+  ocrBaseUrl?: string;
+  thinkingProvider: 'gemini' | 'openai_compatible';
+  thinkingApiKey: string;
+  thinkingModel: string;
+  thinkingBaseUrl?: string;
+  ocrConfigured?: boolean;
+  thinkingConfigured?: boolean;
+}

@@ -107,6 +107,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      {/* Clean Starting State Banner */}
+      {studyDays.length === 0 && (
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-cyan-950/40 via-slate-900 to-slate-900 border border-cyan-800/50 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-mono text-xs">
+          <div className="space-y-1">
+            <span className="text-cyan-400 font-bold uppercase tracking-wider text-[10px] block">
+              Clean Start Active
+            </span>
+            <p className="text-white font-semibold text-sm">
+              Your preparation instrumentation system is fresh and ready.
+            </p>
+            <p className="text-slate-400 text-xs font-sans mt-0.5">
+              • Submit your external API keys in <strong className="text-cyan-300">AI Setup & Keys</strong> (one for OCR vision, one for thinking).<br />
+              • Click <strong className="text-cyan-300">+ Submit Day</strong> to record daily hours, accuracy, and handwritten notebook reflections.
+            </p>
+          </div>
+          <button
+            onClick={onOpenNewDay}
+            className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-white font-bold tracking-wide shrink-0 transition-all self-start sm:self-auto"
+          >
+            Record First Day
+          </button>
+        </div>
+      )}
+
       {/* Metric Cards Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         

@@ -5,6 +5,7 @@ import { DailyLogView } from './components/DailyLogView';
 import { WeeklyReportView } from './components/WeeklyReportView';
 import { BenchmarkView } from './components/BenchmarkView';
 import { CurriculumView } from './components/CurriculumView';
+import { AISetupView } from './components/AISetupView';
 import { ProvenanceModal } from './components/ProvenanceModal';
 import { NewWeekModal } from './components/NewWeekModal';
 import { 
@@ -21,7 +22,7 @@ export function App() {
   const [weeks, setWeeks] = useState<PreparationWeek[]>(INITIAL_WEEKS);
   const [selectedWeekId, setSelectedWeekId] = useState<string>('2026-W40');
   const [studyDays, setStudyDays] = useState<StudyDay[]>(INITIAL_STUDY_DAYS);
-  const [activeReport, setActiveReport] = useState<WeeklyAiReport | null>(INITIAL_AI_REPORTS['2026-W39'] || null);
+  const [activeReport, setActiveReport] = useState<WeeklyAiReport | null>(null);
   const [feedbackLoopEnabled, setFeedbackLoopEnabled] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
@@ -329,6 +330,14 @@ export function App() {
         {activeTab === 'curriculum' && (
           <CurriculumView
             studyDays={studyDays}
+          />
+        )}
+
+        {activeTab === 'ai-setup' && (
+          <AISetupView
+            onSettingsSaved={() => {
+              refreshData();
+            }}
           />
         )}
       </main>

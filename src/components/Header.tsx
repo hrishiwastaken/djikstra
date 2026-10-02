@@ -7,7 +7,8 @@ import {
   Zap, 
   Sliders, 
   HelpCircle,
-  Plus
+  Plus,
+  Key
 } from 'lucide-react';
 import { PreparationWeek } from '../types';
 
@@ -138,7 +139,8 @@ export const Header: React.FC<HeaderProps> = ({
           { id: 'daily-log', label: 'Daily Capture & OCR', icon: Clock },
           { id: 'weekly-report', label: 'Weekly AI Report', icon: Zap },
           { id: 'benchmark', label: 'Benchmark & Allocation', icon: CheckCircle2 },
-          { id: 'curriculum', label: 'Curriculum & Error Vault', icon: GitFork }
+          { id: 'curriculum', label: 'Curriculum & Error Vault', icon: GitFork },
+          { id: 'ai-setup', label: 'AI Setup & Keys', icon: Key }
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
