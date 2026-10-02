@@ -48,10 +48,42 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
   const [thinkingTestResult, setThinkingTestResult] = useState<{ success: boolean; latencyMs?: number; message?: string } | null>(null);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState('');
 
+  // Direct client-side verification fallback
+  const testDirectKey = async (provider: string, apiKey: string, model: string, baseUrl?: string): Promise<{ success: boolean; latencyMs?: number; message?: string }> => {
+    const startTime = Date.now();
+    try {
+      if (provider === 'gemini') {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`);
+        const latencyMs = Date.now() - startTime;
+        if (res.ok) {
+          return { success: true, latencyMs, message: `Direct Gemini Connection Verified (${latencyMs}ms)! Key is active.` };
+        }
+        const errData = await res.json().catch(() => ({}));
+        return { success: false, message: errData.error?.message || `Google API returned ${res.status}: ${res.statusText}` };
+      } else {
+        const url = baseUrl ? `${baseUrl.replace(/\/+$/, '')}/models` : 'https://openrouter.ai/api/v1/models';
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${apiKey.trim()}` }
+        });
+        const latencyMs = Date.now() - startTime;
+        if (res.ok) {
+          return { success: true, latencyMs, message: `Direct OpenRouter Connection Verified (${latencyMs}ms)!` };
+        }
+        const errData = await res.json().catch(() => ({}));
+        return { success: false, message: errData.error?.message || `Provider returned ${res.status}` };
+      }
+    } catch (err: any) {
+      return { success: false, message: `Direct verification check failed: ${err.message || 'Network blocked'}` };
+    }
+  };
+
   // Load existing configuration on mount
   useEffect(() => {
     fetch('/api/settings')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('Not ok');
+        return res.json();
+      })
       .then(data => {
         if (data.ocrProvider) setOcrProvider(data.ocrProvider);
         if (data.ocrModel) setOcrModel(data.ocrModel);
@@ -65,7 +97,26 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
         setThinkingConfigured(Boolean(data.thinkingConfigured));
         setThinkingMaskedKey(data.thinkingMaskedKey || '');
       })
-      .catch(e => console.warn('Could not load AI settings:', e));
+      .catch(() => {
+        try {
+          const saved = localStorage.getItem('dijkstra_ai_config');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed.ocrProvider) setOcrProvider(parsed.ocrProvider);
+            if (parsed.ocrModel) setOcrModel(parsed.ocrModel);
+            if (parsed.thinkingProvider) setThinkingProvider(parsed.thinkingProvider);
+            if (parsed.thinkingModel) setThinkingModel(parsed.thinkingModel);
+            if (parsed.ocrApiKey) {
+              setOcrConfigured(true);
+              setOcrMaskedKey(parsed.ocrApiKey.slice(0, 4) + '••••••••');
+            }
+            if (parsed.thinkingApiKey) {
+              setThinkingConfigured(true);
+              setThinkingMaskedKey(parsed.thinkingApiKey.slice(0, 4) + '••••••••');
+            }
+          }
+        } catch {}
+      });
   }, []);
 
   const handleTestOcr = async () => {
@@ -82,7 +133,24 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
           ocrBaseUrl
         })
       });
-      const data = await res.json();
+
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        if (ocrApiKey && ocrApiKey.trim()) {
+          const direct = await testDirectKey(ocrProvider, ocrApiKey, ocrModel, ocrBaseUrl);
+          setOcrTestResult(direct);
+          return;
+        }
+        throw new Error(
+          res.status === 404
+            ? 'Backend API not connected (404). Check line 9 of netlify.toml has your live Render URL.'
+            : 'Backend returned HTML. If your free Render service is sleeping, wait 30 seconds and retry.'
+        );
+      }
+
       if (res.ok && data.success) {
         setOcrTestResult({
           success: true,
@@ -96,7 +164,12 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
         });
       }
     } catch (err: any) {
-      setOcrTestResult({ success: false, message: err.message || 'Network error' });
+      if (ocrApiKey && ocrApiKey.trim()) {
+        const direct = await testDirectKey(ocrProvider, ocrApiKey, ocrModel, ocrBaseUrl);
+        setOcrTestResult(direct);
+      } else {
+        setOcrTestResult({ success: false, message: err.message || 'Network error' });
+      }
     } finally {
       setIsTestingOcr(false);
     }
@@ -116,7 +189,24 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
           thinkingBaseUrl
         })
       });
-      const data = await res.json();
+
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        if (thinkingApiKey && thinkingApiKey.trim()) {
+          const direct = await testDirectKey(thinkingProvider, thinkingApiKey, thinkingModel, thinkingBaseUrl);
+          setThinkingTestResult(direct);
+          return;
+        }
+        throw new Error(
+          res.status === 404
+            ? 'Backend API not connected (404). Check line 9 of netlify.toml has your live Render URL.'
+            : 'Backend returned HTML. If your free Render service is sleeping, wait 30 seconds and retry.'
+        );
+      }
+
       if (res.ok && data.success) {
         setThinkingTestResult({
           success: true,
@@ -130,7 +220,12 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
         });
       }
     } catch (err: any) {
-      setThinkingTestResult({ success: false, message: err.message || 'Network error' });
+      if (thinkingApiKey && thinkingApiKey.trim()) {
+        const direct = await testDirectKey(thinkingProvider, thinkingApiKey, thinkingModel, thinkingBaseUrl);
+        setThinkingTestResult(direct);
+      } else {
+        setThinkingTestResult({ success: false, message: err.message || 'Network error' });
+      }
     } finally {
       setIsTestingThinking(false);
     }
@@ -140,6 +235,16 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
     e.preventDefault();
     setIsSaving(true);
     setSaveSuccessMessage('');
+
+    // Backup to localStorage
+    try {
+      localStorage.setItem('dijkstra_ai_config', JSON.stringify({
+        ocrProvider, ocrModel, ocrBaseUrl,
+        thinkingProvider, thinkingModel, thinkingBaseUrl,
+        ocrApiKey: ocrApiKey || undefined,
+        thinkingApiKey: thinkingApiKey || undefined
+      }));
+    } catch {}
 
     try {
       const res = await fetch('/api/settings', {
@@ -157,7 +262,26 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
         })
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setSaveSuccessMessage('Settings saved locally in browser storage (Backend is waking up or connecting)');
+        if (ocrApiKey) {
+          setOcrConfigured(true);
+          setOcrMaskedKey('••••••••' + ocrApiKey.slice(-4));
+          setOcrApiKey('');
+        }
+        if (thinkingApiKey) {
+          setThinkingConfigured(true);
+          setThinkingMaskedKey('••••••••' + thinkingApiKey.slice(-4));
+          setThinkingApiKey('');
+        }
+        onSettingsSaved();
+        return;
+      }
+
       if (res.ok) {
         setSaveSuccessMessage('AI API Keys and Provider configurations saved securely.');
         if (ocrApiKey) {
@@ -172,9 +296,22 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
         }
         onSettingsSaved();
         setTimeout(() => setSaveSuccessMessage(''), 4000);
+      } else {
+        alert(data.error || 'Failed to save configuration');
       }
-    } catch (err) {
-      console.error('Failed to save settings:', err);
+    } catch (err: any) {
+      setSaveSuccessMessage('Saved to browser storage (Backend unreachable)');
+      if (ocrApiKey) {
+        setOcrConfigured(true);
+        setOcrMaskedKey('••••••••' + ocrApiKey.slice(-4));
+        setOcrApiKey('');
+      }
+      if (thinkingApiKey) {
+        setThinkingConfigured(true);
+        setThinkingMaskedKey('••••••••' + thinkingApiKey.slice(-4));
+        setThinkingApiKey('');
+      }
+      onSettingsSaved();
     } finally {
       setIsSaving(false);
     }

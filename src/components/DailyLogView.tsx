@@ -155,8 +155,20 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
   const handleSubmitDay = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    const dayId = `day_${Date.now()}`;
+
+    // Restrict raw notebook photo strictly to this device/browser
+    if (uploadedImageBase64) {
+      try {
+        localStorage.setItem(`device_photo_${dayId}`, uploadedImageBase64);
+      } catch (err) {
+        console.warn('Local device storage limit reached for photo:', err);
+      }
+    }
+
     try {
       await onSaveDay({
+        id: dayId,
         weekId: currentWeekId,
         date,
         examFocus,
@@ -173,7 +185,8 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
         questionsWrong: parseInt(questionsWrong, 10) || 0,
         questionsSkipped: parseInt(questionsSkipped, 10) || 0,
         guessedQuestions: parseInt(guessedQuestions, 10) || 0,
-        notebookImages: uploadedImageBase64 ? [uploadedImageBase64] : [],
+        // Photos remain local to the device; host receives structured data only
+        notebookImages: [],
         errorRecords: extractedErrors,
         feedbackLoopEnabledOnSubmit: feedbackLoopEnabled
       });
@@ -378,6 +391,31 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
                         </div>
                       )}
                     </div>
+
+                    {/* Device-Local Photo Attachment */}
+                    {(() => {
+                      const localPhoto = typeof window !== 'undefined' ? localStorage.getItem(`device_photo_${day.id}`) : null;
+                      if (!localPhoto) return null;
+                      return (
+                        <div className="pt-3 border-t border-slate-800/80">
+                          <span className="text-[11px] font-mono text-slate-400 font-semibold flex items-center gap-1.5 mb-2">
+                            <Camera className="w-3.5 h-3.5 text-cyan-400" />
+                            Notebook Scan (Stored on this browser / device only)
+                          </span>
+                          <div className="border border-slate-800 rounded-lg overflow-hidden max-w-sm bg-black/40">
+                            <img 
+                              src={localPhoto} 
+                              alt="Local Notebook Scan" 
+                              className="max-h-56 object-contain rounded"
+                            />
+                            <div className="text-[10px] font-mono text-slate-500 bg-slate-950 px-2.5 py-1 border-t border-slate-800 flex justify-between items-center">
+                              <span>🔒 Device Local</span>
+                              <span>Not stored on cloud host</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>

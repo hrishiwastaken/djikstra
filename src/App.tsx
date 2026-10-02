@@ -20,12 +20,46 @@ import {
 import { INITIAL_WEEKS, INITIAL_STUDY_DAYS, INITIAL_AI_REPORTS, CANONICAL_CURRICULUM } from './data/seedData';
 
 export function App() {
-  const [weeks, setWeeks] = useState<PreparationWeek[]>(INITIAL_WEEKS);
+  const [weeks, setWeeks] = useState<PreparationWeek[]>(() => {
+    try {
+      const saved = localStorage.getItem('dijkstra_weeks');
+      return saved ? JSON.parse(saved) : INITIAL_WEEKS;
+    } catch {
+      return INITIAL_WEEKS;
+    }
+  });
+
   const [selectedWeekId, setSelectedWeekId] = useState<string>('2026-W40');
-  const [studyDays, setStudyDays] = useState<StudyDay[]>(INITIAL_STUDY_DAYS);
+
+  const [studyDays, setStudyDays] = useState<StudyDay[]>(() => {
+    try {
+      const saved = localStorage.getItem('dijkstra_days');
+      return saved ? JSON.parse(saved) : INITIAL_STUDY_DAYS;
+    } catch {
+      return INITIAL_STUDY_DAYS;
+    }
+  });
+
   const [activeReport, setActiveReport] = useState<WeeklyAiReport | null>(null);
   const [feedbackLoopEnabled, setFeedbackLoopEnabled] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+
+  // Sync to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('dijkstra_weeks', JSON.stringify(weeks));
+    } catch (e) {
+      console.warn('Failed to save weeks to localStorage:', e);
+    }
+  }, [weeks]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('dijkstra_days', JSON.stringify(studyDays));
+    } catch (e) {
+      console.warn('Failed to save days to localStorage:', e);
+    }
+  }, [studyDays]);
 
   // Modals
   const [isNewDayModalOpen, setIsNewDayModalOpen] = useState(false);
@@ -52,7 +86,7 @@ export function App() {
       }
       if (daysRes.ok) {
         const dData = await daysRes.json();
-        if (Array.isArray(dData) && dData.length > 0) setStudyDays(dData);
+        if (Array.isArray(dData)) setStudyDays(dData);
       }
     } catch (err) {
       console.warn('Backend fetch failed, using memory state:', err);

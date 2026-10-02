@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import { 
@@ -42,12 +43,15 @@ for (let i = 0; i < args.length; i++) {
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-// In-memory persistent database store (starts completely clean)
+// Persistent JSON file database path
+const DB_FILE = path.join(__dirname, 'data', 'db.json');
+
+// In-memory + file-backed persistent database store
 let weeks: PreparationWeek[] = JSON.parse(JSON.stringify(INITIAL_WEEKS));
 let studyDays: StudyDay[] = JSON.parse(JSON.stringify(INITIAL_STUDY_DAYS));
 let reports: Record<string, WeeklyAiReport> = JSON.parse(JSON.stringify(INITIAL_AI_REPORTS));
 
-// AI Model Settings Store (Separate OCR & Thinking configurations)
+// AI Model Settings Store
 let aiSettings = {
   ocrProvider: 'gemini' as 'gemini' | 'openai_compatible',
   ocrApiKey: process.env.GEMINI_API_KEY || '',
@@ -59,6 +63,47 @@ let aiSettings = {
   thinkingModel: 'gemini-3.8-flash',
   thinkingBaseUrl: 'https://openrouter.ai/api/v1'
 };
+
+function loadDatabase() {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const raw = fs.readFileSync(DB_FILE, 'utf-8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data.weeks) && data.weeks.length > 0) weeks = data.weeks;
+      if (Array.isArray(data.studyDays)) studyDays = data.studyDays;
+      if (data.reports) reports = data.reports;
+      if (data.aiSettings) {
+        aiSettings = { ...aiSettings, ...data.aiSettings };
+      }
+    }
+  } catch (err) {
+    console.warn('Could not read db.json, using defaults:', err);
+  }
+}
+
+function saveDatabase() {
+  try {
+    const dir = path.dirname(DB_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(DB_FILE, JSON.stringify({
+      weeks,
+      studyDays,
+      reports,
+      aiSettings: {
+        ocrProvider: aiSettings.ocrProvider,
+        ocrModel: aiSettings.ocrModel,
+        ocrBaseUrl: aiSettings.ocrBaseUrl,
+        thinkingProvider: aiSettings.thinkingProvider,
+        thinkingModel: aiSettings.thinkingModel,
+        thinkingBaseUrl: aiSettings.thinkingBaseUrl
+      }
+    }, null, 2));
+  } catch (err) {
+    console.warn('Could not save to db.json:', err);
+  }
+}
+
+loadDatabase();
 
 function maskApiKey(key: string): string {
   if (!key) return '';
@@ -309,6 +354,8 @@ app.post('/api/settings', (req, res) => {
   if (thinkingModel) aiSettings.thinkingModel = thinkingModel.trim();
   if (thinkingBaseUrl !== undefined) aiSettings.thinkingBaseUrl = thinkingBaseUrl.trim();
 
+  saveDatabase();
+
   res.json({
     success: true,
     message: 'AI Model configuration saved',
@@ -426,6 +473,7 @@ app.post('/api/weeks', (req, res) => {
   } else {
     weeks.push(newWeek);
   }
+  saveDatabase();
   res.json(newWeek);
 });
 
@@ -471,6 +519,7 @@ app.post('/api/days', (req, res) => {
   };
 
   studyDays.unshift(newDay);
+  saveDatabase();
 
   res.status(201).json({
     day: newDay,
@@ -850,6 +899,7 @@ Use only the supplied evidence.`;
     };
 
     reports[weekId] = newReport;
+    saveDatabase();
     res.json(newReport);
   } catch (err: any) {
     console.error('Weekly report generation failed:', err);
@@ -862,6 +912,7 @@ app.post('/api/benchmarks', (req, res) => {
   const weekIdx = weeks.findIndex(w => w.id === bm.weekId);
   if (weekIdx >= 0) {
     weeks[weekIdx].benchmark = bm;
+    saveDatabase();
   }
   res.json({ success: true, benchmark: bm });
 });
