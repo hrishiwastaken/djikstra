@@ -1,0 +1,7 @@
+{
+  "name": "Dijkstra: JEE/CET Prep & Performance Instrumentation",
+  "description": "Adaptive JEE/CET preparation & performance analysis system with digital notebook OCR extraction, deterministic analytics, dynamic feedback loop switch, and evidence-grounded AI diagnostic reasoning.",
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
