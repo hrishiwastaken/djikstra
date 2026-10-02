@@ -367,18 +367,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* Legend */}
-          <div className="flex items-center gap-3 text-[11px] font-mono">
-            <span className="flex items-center gap-1.5 text-rose-400">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-              Critical (≥2 gaps / leaked marks)
+          <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono">
+            <span className="flex items-center gap-1.5 text-slate-400">
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+              Untested (0 logs)
+            </span>
+            <span className="flex items-center gap-1.5 text-emerald-400">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              Strong
             </span>
             <span className="flex items-center gap-1.5 text-amber-400">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
               Warning
             </span>
-            <span className="flex items-center gap-1.5 text-emerald-400">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-              Strong
+            <span className="flex items-center gap-1.5 text-rose-400">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+              Critical (≥2 gaps)
             </span>
           </div>
         </div>
@@ -391,7 +395,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span className="font-mono font-bold text-xs uppercase text-cyan-400 tracking-wider">Physics</span>
               <span className="text-[10px] font-mono text-slate-400">{physicsChapters.length} Chapters</span>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
               {physicsChapters.map(c => (
                 <div 
                   key={c.chapter}
@@ -408,13 +412,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       c.status === 'critical' ? 'bg-rose-500' :
                       c.status === 'warning' ? 'bg-amber-500' :
                       c.status === 'strong' ? 'bg-emerald-500' :
-                      'bg-slate-700'
+                      'bg-slate-600'
                     }`} />
                   </div>
-                  {c.wrong > 0 && (
+                  {c.wrong > 0 ? (
                     <div className="text-[10px] text-slate-400 mt-1 flex justify-between">
                       <span>{c.wrong} errors logged</span>
                       <span>{c.totalTimeLostMinutes}m lost</span>
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-slate-500 mt-1 flex justify-between">
+                      <span>Untested</span>
+                      <span>0m lost</span>
                     </div>
                   )}
                 </div>
@@ -428,7 +437,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span className="font-mono font-bold text-xs uppercase text-emerald-400 tracking-wider">Chemistry</span>
               <span className="text-[10px] font-mono text-slate-400">{chemChapters.length} Chapters</span>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
               {chemChapters.map(c => (
                 <div 
                   key={c.chapter}
@@ -445,13 +454,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       c.status === 'critical' ? 'bg-rose-500' :
                       c.status === 'warning' ? 'bg-amber-500' :
                       c.status === 'strong' ? 'bg-emerald-500' :
-                      'bg-slate-700'
+                      'bg-slate-600'
                     }`} />
                   </div>
-                  {c.wrong > 0 && (
+                  {c.wrong > 0 ? (
                     <div className="text-[10px] text-slate-400 mt-1 flex justify-between">
                       <span>{c.wrong} errors logged</span>
                       <span>{c.totalTimeLostMinutes}m lost</span>
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-slate-500 mt-1 flex justify-between">
+                      <span>Untested</span>
+                      <span>0m lost</span>
                     </div>
                   )}
                 </div>
@@ -465,7 +479,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span className="font-mono font-bold text-xs uppercase text-purple-400 tracking-wider">Mathematics</span>
               <span className="text-[10px] font-mono text-slate-400">{mathChapters.length} Chapters</span>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
               {mathChapters.map(c => (
                 <div 
                   key={c.chapter}
@@ -482,13 +496,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       c.status === 'critical' ? 'bg-rose-500' :
                       c.status === 'warning' ? 'bg-amber-500' :
                       c.status === 'strong' ? 'bg-emerald-500' :
-                      'bg-slate-700'
+                      'bg-slate-600'
                     }`} />
                   </div>
-                  {c.wrong > 0 && (
+                  {c.wrong > 0 ? (
                     <div className="text-[10px] text-slate-400 mt-1 flex justify-between">
                       <span>{c.wrong} errors logged</span>
                       <span>{c.totalTimeLostMinutes}m lost</span>
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-slate-500 mt-1 flex justify-between">
+                      <span>Untested</span>
+                      <span>0m lost</span>
                     </div>
                   )}
                 </div>

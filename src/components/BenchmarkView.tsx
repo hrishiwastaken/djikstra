@@ -29,19 +29,19 @@ export const BenchmarkView: React.FC<BenchmarkViewProps> = ({
   const [notes, setNotes] = useState('');
 
   // Physics breakdown
-  const [pAttempted, setPAttempted] = useState(examType === 'JEE' ? '21' : '45');
-  const [pCorrect, setPCorrect] = useState(examType === 'JEE' ? '18' : '39');
-  const [pWrong, setPWrong] = useState(examType === 'JEE' ? '3' : '6');
+  const [pAttempted, setPAttempted] = useState('');
+  const [pCorrect, setPCorrect] = useState('');
+  const [pWrong, setPWrong] = useState('');
 
   // Chemistry breakdown
-  const [cAttempted, setCAttempted] = useState(examType === 'JEE' ? '23' : '48');
-  const [cCorrect, setCCorrect] = useState(examType === 'JEE' ? '19' : '42');
-  const [cWrong, setCWrong] = useState(examType === 'JEE' ? '4' : '6');
+  const [cAttempted, setCAttempted] = useState('');
+  const [cCorrect, setCCorrect] = useState('');
+  const [cWrong, setCWrong] = useState('');
 
   // Math breakdown
-  const [mAttempted, setMAttempted] = useState(examType === 'JEE' ? '18' : '42');
-  const [mCorrect, setMCorrect] = useState(examType === 'JEE' ? '12' : '34');
-  const [mWrong, setMWrong] = useState(examType === 'JEE' ? '6' : '8');
+  const [mAttempted, setMAttempted] = useState('');
+  const [mCorrect, setMCorrect] = useState('');
+  const [mWrong, setMWrong] = useState('');
 
   // Allocation ratios
   const allowedRatios: Array<{ ratio: '5:0' | '4:1' | '3:2' | '2:3' | '1:4' | '0:5'; jee: number; cet: number; desc: string }> = [

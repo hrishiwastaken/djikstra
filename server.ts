@@ -497,18 +497,15 @@ app.post('/api/extract-errors', async (req, res) => {
   const prompt = `You are Dijkstra's Vision Extraction layer for JEE/CET student mistake analysis notebooks.
 Strict rule: Extract structured error records from the handwritten mistake reflections.
 Do not invent missing data. Unknowns must be null.
-Curriculum vocabulary allowed:
-- Physics (Rotational Motion, Electrostatics, Thermodynamics & KTG, Current Electricity, Ray & Wave Optics)
-- Chemistry (Chemical Bonding & Molecular Structure, Organic Alcohols, Phenols & Ethers, Thermodynamics & Energetics, Coordination Compounds, Electrochemistry)
-- Mathematics (Integral Calculus (Indefinite & Definite), Coordinate Geometry (Conics & Lines), Differential Equations, Vectors & 3D Geometry, Probability & Statistics)
+Curriculum vocabulary allowed: Standard official JEE & CET chapters and concepts across Physics, Chemistry, and Mathematics (e.g. Kinematics, Laws of Motion, Rotational Motion, Thermodynamics, Electrostatics, Ray Optics, Chemical Bonding, Solutions, Coordination Compounds, GOC & Hydrocarbons, Calculus, Coordinate Geometry, Vectors & 3D, Probability, etc.).
 
 Valid error_types: 'concept', 'application', 'execution', 'selection'
 Valid confidence_levels: 'correct_confident', 'correct_uncertain', 'wrong_confident', 'wrong_uncertain'
 
 Return a JSON object containing a "records" array. Each item must have:
 - subject (Physics | Chemistry | Mathematics)
-- chapter (string)
-- concept (string)
+- chapter (exact standard chapter title)
+- concept (specific concept from the curriculum)
 - errorType (concept | application | execution | selection)
 - description (what went wrong)
 - whyItHappened (root cognitive cause)

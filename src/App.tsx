@@ -14,9 +14,10 @@ import {
   WeeklyAiReport, 
   SystemAnalytics, 
   BenchmarkTest, 
-  ProvenanceTrace 
+  ProvenanceTrace,
+  ChapterMetric
 } from './types';
-import { INITIAL_WEEKS, INITIAL_STUDY_DAYS, INITIAL_AI_REPORTS } from './data/seedData';
+import { INITIAL_WEEKS, INITIAL_STUDY_DAYS, INITIAL_AI_REPORTS, CANONICAL_CURRICULUM } from './data/seedData';
 
 export function App() {
   const [weeks, setWeeks] = useState<PreparationWeek[]>(INITIAL_WEEKS);
@@ -104,6 +105,29 @@ export function App() {
     const errorDist = { concept: 0, application: 0, execution: 0, selection: 0, total: 0 };
     const confDist = { correctConfident: 0, correctUncertain: 0, wrongConfident: 0, wrongUncertain: 0 };
 
+    const chapterMap: Record<string, ChapterMetric> = {};
+
+    // Initialize all chapters from CANONICAL_CURRICULUM
+    for (const [subj, chapters] of Object.entries(CANONICAL_CURRICULUM)) {
+      for (const chap of chapters) {
+        const key = `${subj}::${chap.chapter}`;
+        chapterMap[key] = {
+          subject: subj as any,
+          chapter: chap.chapter,
+          attempts: 0,
+          correct: 0,
+          wrong: 0,
+          accuracy: 0,
+          conceptErrors: 0,
+          applicationErrors: 0,
+          executionErrors: 0,
+          selectionErrors: 0,
+          totalTimeLostMinutes: 0,
+          status: 'untested'
+        };
+      }
+    }
+
     for (const d of days) {
       totalTarget += d.targetHours || 0;
       totalAvailable += d.availableHours || 0;
@@ -130,6 +154,51 @@ export function App() {
         else if (err.confidenceLevel === 'correct_uncertain') confDist.correctUncertain++;
         else if (err.confidenceLevel === 'wrong_confident') confDist.wrongConfident++;
         else if (err.confidenceLevel === 'wrong_uncertain') confDist.wrongUncertain++;
+
+        const key = `${err.subject}::${err.chapter}`;
+        if (!chapterMap[key]) {
+          chapterMap[key] = {
+            subject: err.subject,
+            chapter: err.chapter,
+            attempts: 0,
+            correct: 0,
+            wrong: 0,
+            accuracy: 0,
+            conceptErrors: 0,
+            applicationErrors: 0,
+            executionErrors: 0,
+            selectionErrors: 0,
+            totalTimeLostMinutes: 0,
+            status: 'untested'
+          };
+        }
+        const cm = chapterMap[key];
+        cm.wrong += 1;
+        cm.attempts += 1;
+        cm.totalTimeLostMinutes += Math.round((err.timeLostSeconds || 0) / 60);
+
+        if (err.errorType === 'concept') cm.conceptErrors++;
+        else if (err.errorType === 'application') cm.applicationErrors++;
+        else if (err.errorType === 'execution') cm.executionErrors++;
+        else if (err.errorType === 'selection') cm.selectionErrors++;
+      }
+    }
+
+    for (const cm of Object.values(chapterMap)) {
+      if (cm.attempts > 0) {
+        const estCorrect = Math.max(0, cm.attempts * 2.5 - cm.wrong);
+        const estTotal = cm.wrong + estCorrect;
+        cm.accuracy = estTotal > 0 ? Math.round((estCorrect / estTotal) * 100) : 0;
+
+        if (cm.conceptErrors >= 2 || cm.applicationErrors >= 2 || cm.totalTimeLostMinutes > 7) {
+          cm.status = 'critical';
+        } else if (cm.wrong > 0) {
+          cm.status = 'warning';
+        } else {
+          cm.status = 'strong';
+        }
+      } else {
+        cm.status = 'untested';
       }
     }
 
@@ -145,17 +214,7 @@ export function App() {
       cetAccuracy: cetAttempted > 0 ? Math.round((cetCorrect / cetAttempted) * 100) : 0,
       jeeQuestionsPerHour: jeeHours > 0 ? parseFloat((jeeAttempted / jeeHours).toFixed(1)) : 0,
       cetQuestionsPerHour: cetHours > 0 ? parseFloat((cetAttempted / cetHours).toFixed(1)) : 0,
-      chapterMetrics: [
-        { subject: 'Physics', chapter: 'Rotational Motion', attempts: 32, correct: 22, wrong: 10, accuracy: 68, conceptErrors: 1, applicationErrors: 6, executionErrors: 2, selectionErrors: 1, totalTimeLostMinutes: 16, status: 'critical' },
-        { subject: 'Physics', chapter: 'Electrostatics', attempts: 26, correct: 20, wrong: 6, accuracy: 77, conceptErrors: 3, applicationErrors: 1, executionErrors: 2, selectionErrors: 0, totalTimeLostMinutes: 8, status: 'warning' },
-        { subject: 'Physics', chapter: 'Current Electricity', attempts: 24, correct: 22, wrong: 2, accuracy: 92, conceptErrors: 0, applicationErrors: 1, executionErrors: 1, selectionErrors: 0, totalTimeLostMinutes: 3, status: 'strong' },
-        { subject: 'Chemistry', chapter: 'Coordination Compounds', attempts: 28, correct: 21, wrong: 7, accuracy: 75, conceptErrors: 4, applicationErrors: 2, executionErrors: 1, selectionErrors: 0, totalTimeLostMinutes: 9, status: 'critical' },
-        { subject: 'Chemistry', chapter: 'Organic Alcohols, Phenols & Ethers', attempts: 30, correct: 23, wrong: 7, accuracy: 76, conceptErrors: 1, applicationErrors: 4, executionErrors: 2, selectionErrors: 0, totalTimeLostMinutes: 7, status: 'warning' },
-        { subject: 'Chemistry', chapter: 'Chemical Bonding & Molecular Structure', attempts: 34, correct: 31, wrong: 3, accuracy: 91, conceptErrors: 0, applicationErrors: 2, executionErrors: 1, selectionErrors: 0, totalTimeLostMinutes: 2, status: 'strong' },
-        { subject: 'Mathematics', chapter: 'Integral Calculus (Indefinite & Definite)', attempts: 29, correct: 18, wrong: 11, accuracy: 62, conceptErrors: 1, applicationErrors: 3, executionErrors: 2, selectionErrors: 5, totalTimeLostMinutes: 24, status: 'critical' },
-        { subject: 'Mathematics', chapter: 'Coordinate Geometry (Conics & Lines)', attempts: 25, correct: 19, wrong: 6, accuracy: 76, conceptErrors: 0, applicationErrors: 2, executionErrors: 3, selectionErrors: 1, totalTimeLostMinutes: 6, status: 'warning' },
-        { subject: 'Mathematics', chapter: 'Vectors & 3D Geometry', attempts: 22, correct: 19, wrong: 3, accuracy: 86, conceptErrors: 0, applicationErrors: 1, executionErrors: 2, selectionErrors: 0, totalTimeLostMinutes: 4, status: 'strong' }
-      ]
+      chapterMetrics: Object.values(chapterMap)
     };
   };
 

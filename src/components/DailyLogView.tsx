@@ -45,19 +45,19 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
   const [context, setContext] = useState('');
   
   // Time metrics
-  const [targetHours, setTargetHours] = useState('6.0');
-  const [availableHours, setAvailableHours] = useState('5.5');
-  const [actualHours, setActualHours] = useState('5.0');
-  const [testingHours, setTestingHours] = useState('3.0');
-  const [analysisHours, setAnalysisHours] = useState('1.5');
-  const [otherHours, setOtherHours] = useState('0.5');
+  const [targetHours, setTargetHours] = useState('');
+  const [availableHours, setAvailableHours] = useState('');
+  const [actualHours, setActualHours] = useState('');
+  const [testingHours, setTestingHours] = useState('');
+  const [analysisHours, setAnalysisHours] = useState('');
+  const [otherHours, setOtherHours] = useState('');
 
   // Question metrics
-  const [questionsAttempted, setQuestionsAttempted] = useState('45');
-  const [questionsCorrect, setQuestionsCorrect] = useState('34');
-  const [questionsWrong, setQuestionsWrong] = useState('8');
-  const [questionsSkipped, setQuestionsSkipped] = useState('3');
-  const [guessedQuestions, setGuessedQuestions] = useState('2');
+  const [questionsAttempted, setQuestionsAttempted] = useState('');
+  const [questionsCorrect, setQuestionsCorrect] = useState('');
+  const [questionsWrong, setQuestionsWrong] = useState('');
+  const [questionsSkipped, setQuestionsSkipped] = useState('');
+  const [guessedQuestions, setGuessedQuestions] = useState('');
 
   // Notebook upload / extraction
   const [uploadedImageBase64, setUploadedImageBase64] = useState<string | null>(null);
@@ -134,11 +134,12 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
   };
 
   const handleAddManualError = () => {
+    const defaultChap = CANONICAL_CURRICULUM.Physics[0];
     const newErr: ErrorRecord = {
       id: `err_manual_${Date.now()}`,
       subject: 'Physics',
-      chapter: 'Rotational Motion',
-      concept: 'General Concept',
+      chapter: defaultChap.chapter,
+      concept: defaultChap.concepts[0] || 'General Concept',
       errorType: 'application',
       description: '',
       whyItHappened: '',
@@ -694,7 +695,15 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
                           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                             <select
                               value={err.subject}
-                              onChange={(e) => handleUpdateExtractedField(idx, 'subject', e.target.value)}
+                              onChange={(e) => {
+                                const newSubj = e.target.value as 'Physics' | 'Chemistry' | 'Mathematics';
+                                handleUpdateExtractedField(idx, 'subject', newSubj);
+                                const firstChap = CANONICAL_CURRICULUM[newSubj]?.[0];
+                                if (firstChap) {
+                                  handleUpdateExtractedField(idx, 'chapter', firstChap.chapter);
+                                  handleUpdateExtractedField(idx, 'concept', firstChap.concepts[0] || 'General Concept');
+                                }
+                              }}
                               className="bg-slate-950 border border-slate-700 rounded p-1 text-slate-200"
                             >
                               <option value="Physics">Physics</option>
@@ -702,13 +711,22 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
                               <option value="Mathematics">Mathematics</option>
                             </select>
 
-                            <input
-                              type="text"
+                            <select
                               value={err.chapter}
-                              placeholder="Chapter"
-                              onChange={(e) => handleUpdateExtractedField(idx, 'chapter', e.target.value)}
-                              className="bg-slate-950 border border-slate-700 rounded p-1 text-slate-200"
-                            />
+                              onChange={(e) => {
+                                const newChap = e.target.value;
+                                handleUpdateExtractedField(idx, 'chapter', newChap);
+                                const chapObj = CANONICAL_CURRICULUM[err.subject]?.find(c => c.chapter === newChap);
+                                if (chapObj && chapObj.concepts.length > 0) {
+                                  handleUpdateExtractedField(idx, 'concept', chapObj.concepts[0]);
+                                }
+                              }}
+                              className="bg-slate-950 border border-slate-700 rounded p-1 text-slate-200 truncate"
+                            >
+                              {CANONICAL_CURRICULUM[err.subject]?.map(c => (
+                                <option key={c.chapter} value={c.chapter}>{c.chapter}</option>
+                              ))}
+                            </select>
 
                             <select
                               value={err.errorType}
@@ -743,13 +761,32 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
                             </div>
                           </div>
 
-                          <input
-                            type="text"
-                            value={err.description}
-                            placeholder="What went wrong?"
-                            onChange={(e) => handleUpdateExtractedField(idx, 'description', e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-slate-200"
-                          />
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                              <input
+                                list={`concepts-${idx}`}
+                                type="text"
+                                value={err.concept}
+                                placeholder="Concept (choose or type)"
+                                onChange={(e) => handleUpdateExtractedField(idx, 'concept', e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-cyan-300 text-xs"
+                              />
+                              <datalist id={`concepts-${idx}`}>
+                                {CANONICAL_CURRICULUM[err.subject]
+                                  ?.find(c => c.chapter === err.chapter)
+                                  ?.concepts.map((cpt, i) => (
+                                    <option key={i} value={cpt} />
+                                  ))}
+                              </datalist>
+                            </div>
+                            <input
+                              type="text"
+                              value={err.description}
+                              placeholder="What went wrong (reflection)?"
+                              onChange={(e) => handleUpdateExtractedField(idx, 'description', e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-slate-200"
+                            />
+                          </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
                             <input

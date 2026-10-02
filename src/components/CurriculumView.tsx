@@ -97,8 +97,8 @@ export const CurriculumView: React.FC<CurriculumViewProps> = ({ studyDays }) => 
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
           {/* Chapter list */}
-          <div className="space-y-1.5 bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
-            <span className="text-[10px] font-mono uppercase text-slate-500 font-bold block mb-2">
+          <div className="space-y-1.5 bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 max-h-[520px] overflow-y-auto pr-1">
+            <span className="text-[10px] font-mono uppercase text-slate-500 font-bold block mb-2 sticky top-0 bg-slate-950/90 py-1">
               Chapters ({CANONICAL_CURRICULUM[selectedSubject].length})
             </span>
             {CANONICAL_CURRICULUM[selectedSubject].map(chap => {
@@ -138,7 +138,7 @@ export const CurriculumView: React.FC<CurriculumViewProps> = ({ studyDays }) => 
               </span>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
               {CANONICAL_CURRICULUM[selectedSubject]
                 .find(c => c.chapter === selectedChapter)
                 ?.concepts.map((concept, i) => (
