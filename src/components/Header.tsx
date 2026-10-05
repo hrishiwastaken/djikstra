@@ -8,9 +8,12 @@ import {
   Sliders, 
   HelpCircle,
   Plus,
-  Key
+  Key,
+  LogOut,
+  Database,
+  User
 } from 'lucide-react';
-import { PreparationWeek } from '../types';
+import { PreparationWeek, AuthUser } from '../types';
 
 interface HeaderProps {
   weeks: PreparationWeek[];
@@ -21,6 +24,9 @@ interface HeaderProps {
   onOpenNewWeekModal: () => void;
   activeTab: string;
   onSelectTab: (tab: string) => void;
+  currentUser?: AuthUser | null;
+  onLogout?: () => void;
+  onOpenCsvModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -31,7 +37,10 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleFeedbackLoop,
   onOpenNewWeekModal,
   activeTab,
-  onSelectTab
+  onSelectTab,
+  currentUser,
+  onLogout,
+  onOpenCsvModal
 }) => {
   const currentWeek = weeks.find(w => w.id === selectedWeekId) || weeks[0];
 
@@ -93,10 +102,23 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* Dynamic Feedback Loop Switch (Specified in README Section 4) */}
-        <div className="flex items-center gap-3">
+        {/* Right side: CSV, Loop Switch & Account Welcome */}
+        <div className="flex items-center gap-2.5">
+          {/* CSV Import/Export Button */}
+          {onOpenCsvModal && (
+            <button
+              onClick={onOpenCsvModal}
+              title="CSV Data Pipeline (Import & Export)"
+              className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-cyan-300 text-xs font-mono font-medium flex items-center gap-1.5 transition-all shadow-sm"
+            >
+              <Database className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">CSV Data</span>
+            </button>
+          )}
+
+          {/* Dynamic Feedback Loop Switch */}
           <div 
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${
+            className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all ${
               feedbackLoopEnabled 
                 ? 'bg-emerald-950/40 border-emerald-500/50 shadow-sm shadow-emerald-900/30' 
                 : 'bg-amber-950/30 border-amber-600/40'
@@ -105,10 +127,10 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex flex-col text-right">
               <span className="text-[10px] uppercase tracking-wider font-mono font-bold flex items-center gap-1 justify-end">
                 <span className={`w-2 h-2 rounded-full ${feedbackLoopEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
-                Feedback Loop
+                Loop
               </span>
-              <span className="text-[10px] text-slate-400">
-                {feedbackLoopEnabled ? 'Full Adaptive Pipeline' : 'Fast Capture Only'}
+              <span className="text-[9px] text-slate-400">
+                {feedbackLoopEnabled ? 'Active' : 'Fast'}
               </span>
             </div>
 
@@ -117,17 +139,42 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               role="switch"
               aria-checked={feedbackLoopEnabled}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                 feedbackLoopEnabled ? 'bg-emerald-600' : 'bg-slate-700'
               }`}
             >
               <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                  feedbackLoopEnabled ? 'translate-x-5' : 'translate-x-0'
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  feedbackLoopEnabled ? 'translate-x-4' : 'translate-x-0'
                 }`}
               />
             </button>
           </div>
+
+          {/* User Account / Welcome Badge & Logout */}
+          {currentUser && (
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs font-mono">
+              <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-[11px] shadow-sm">
+                {currentUser.username.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[9px] text-slate-500 uppercase leading-none">Account</span>
+                <span className="text-slate-200 font-semibold text-xs leading-tight">
+                  👋 {currentUser.username}
+                </span>
+              </div>
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  title="Sign out of your account"
+                  className="ml-1 p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 border border-slate-800 hover:border-rose-800/60 transition-all flex items-center gap-1"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden lg:inline text-[10px]">Logout</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
       </div>

@@ -9,11 +9,18 @@ import {
   ArrowUpRight, 
   TrendingUp, 
   Zap, 
-  Compass,
-  FileText,
-  Plus
+  Compass, 
+  FileText, 
+  Plus,
+  BarChart3,
+  Flame,
+  PieChart,
+  Calendar,
+  Layers,
+  ChevronRight
 } from 'lucide-react';
-import { SystemAnalytics, PreparationWeek, StudyDay } from '../types';
+import { SystemAnalytics, PreparationWeek, StudyDay, AuthUser } from '../types';
+import { DailyGoalsTracker } from './DailyGoalsTracker';
 
 interface DashboardViewProps {
   analytics: SystemAnalytics;
@@ -21,6 +28,8 @@ interface DashboardViewProps {
   studyDays: StudyDay[];
   onOpenNewDay: () => void;
   onNavigateToReport: () => void;
+  currentUser?: AuthUser | null;
+  onNavigateToDailyLog?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -28,7 +37,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   currentWeek,
   studyDays,
   onOpenNewDay,
-  onNavigateToReport
+  onNavigateToReport,
+  currentUser,
+  onNavigateToDailyLog
 }) => {
   const targetWeeklyHours = currentWeek.targetWeeklyHours || 30;
   const hoursProgress = Math.min(100, Math.round((analytics.totalActualHours / targetWeeklyHours) * 100));
@@ -44,6 +55,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const chemChapters = analytics.chapterMetrics.filter(c => c.subject === 'Chemistry');
   const mathChapters = analytics.chapterMetrics.filter(c => c.subject === 'Mathematics');
 
+  // Visual trend data (last 7 study sessions)
+  const recentSessions = [...studyDays].slice(0, 7).reverse();
+  const maxDayHours = Math.max(6, ...recentSessions.map(d => Math.max(d.actualHours || 0, d.targetHours || 0)));
+
+  // Subject question distribution
+  const totalSubjectAttempts = analytics.chapterMetrics.reduce((acc, c) => acc + c.attempts, 0) || 1;
+  const physicsAttempts = physicsChapters.reduce((acc, c) => acc + c.attempts, 0);
+  const chemAttempts = chemChapters.reduce((acc, c) => acc + c.attempts, 0);
+  const mathAttempts = mathChapters.reduce((acc, c) => acc + c.attempts, 0);
+  const physicsPct = Math.round((physicsAttempts / totalSubjectAttempts) * 100);
+  const chemPct = Math.round((chemAttempts / totalSubjectAttempts) * 100);
+  const mathPct = Math.round((mathAttempts / totalSubjectAttempts) * 100);
+
+  // Curricular Health Breakdown
+  const criticalCount = analytics.chapterMetrics.filter(c => c.status === 'critical').length;
+  const warningCount = analytics.chapterMetrics.filter(c => c.status === 'warning').length;
+  const strongCount = analytics.chapterMetrics.filter(c => c.status === 'strong').length;
+  const untestedCount = analytics.chapterMetrics.filter(c => c.status === 'untested').length;
+
   return (
     <div className="space-y-6">
       
@@ -53,10 +83,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
               <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase bg-cyan-950 text-cyan-400 border border-cyan-800/60">
                 {currentWeek.id}
               </span>
+              {currentUser && (
+                <span className="text-xs font-mono font-bold text-cyan-300 px-2 py-0.5 rounded-md bg-slate-950/80 border border-cyan-800/50">
+                  👋 Welcome, {currentUser.username}
+                </span>
+              )}
               <span className="text-xs font-mono text-slate-400">
                 {currentWeek.startDate} → {currentWeek.endDate}
               </span>
@@ -68,7 +103,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {currentWeek.title}
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl font-mono">
-              Feedback Loop Status: Active. Prioritizing deterministic tracking with verifiable AI diagnostic reasoning.
+              {currentUser 
+                ? `Welcome back, ${currentUser.username}. Preparation telemetry is ready with isolated account storage.`
+                : 'Feedback Loop Status: Active. Prioritizing deterministic tracking with verifiable AI diagnostic reasoning.'}
             </p>
           </div>
 
@@ -78,7 +115,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold text-xs font-mono tracking-wide shadow-lg shadow-cyan-500/25 flex items-center gap-2 transition-all"
             >
               <Plus className="w-4 h-4" />
-              + Submit Day
+              Submit Day
             </button>
             <button
               onClick={onNavigateToReport}
@@ -115,11 +152,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Clean Start Active
             </span>
             <p className="text-white font-semibold text-sm">
-              Your preparation instrumentation system is fresh and ready.
+              {currentUser ? `Welcome, ${currentUser.username}! Your database is initialized completely clean.` : 'Your preparation instrumentation system is fresh and ready.'}
             </p>
             <p className="text-slate-400 text-xs font-sans mt-0.5">
-              • Submit your external API keys in <strong className="text-cyan-300">AI Setup & Keys</strong> (one for OCR vision, one for thinking).<br />
-              • Click <strong className="text-cyan-300">+ Submit Day</strong> to record daily hours, accuracy, and handwritten notebook reflections.
+              • Submit your account API keys in <strong className="text-cyan-300">AI Setup & Keys</strong> (isolated strictly to your account).<br />
+              • Click <strong className="text-cyan-300">Submit Day</strong> or <strong className="text-cyan-300">CSV Data</strong> to import past study records.
             </p>
           </div>
           <button
@@ -187,6 +224,212 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div className="text-[11px] text-slate-400 font-mono mt-1">
             {analytics.cetQuestionsPerHour} Q/hr (Velocity & agility)
+          </div>
+        </div>
+
+      </div>
+
+      {/* Row 1.5: Visual Study Goals & 7-Day Velocity Burn-up Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Widget 1: Today's Daily Study Goals Tracker */}
+        <div className="lg:col-span-1">
+          <DailyGoalsTracker compact={true} onOpenDailyLog={onNavigateToDailyLog} />
+        </div>
+
+        {/* Widget 2: 7-Session Practice Volume & Velocity Visualizer */}
+        <div className="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-blue-950 border border-blue-800/60 text-blue-400">
+                <BarChart3 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
+                  Session Practice Velocity & Hours Burn-up
+                </h3>
+                <p className="text-[11px] text-slate-400 font-mono">
+                  Daily actual vs target hours, question volume, and precision
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 text-[11px] font-mono">
+              <span className="flex items-center gap-1.5 text-cyan-400">
+                <span className="w-2.5 h-2.5 rounded-sm bg-cyan-500"></span> Actual Hours
+              </span>
+              <span className="flex items-center gap-1.5 text-slate-400">
+                <span className="w-2.5 h-2.5 rounded-sm bg-slate-700"></span> Target Hours
+              </span>
+            </div>
+          </div>
+
+          {recentSessions.length === 0 ? (
+            <div className="py-10 text-center bg-slate-950/40 rounded-xl border border-dashed border-slate-800 font-mono text-xs text-slate-500">
+              <Calendar className="w-8 h-8 mx-auto mb-2 text-slate-600" />
+              <p>No study sessions recorded yet.</p>
+              <p className="text-[11px] text-slate-600 mt-1">Submit your first day to populate the velocity telemetry.</p>
+            </div>
+          ) : (
+            <div className="pt-2">
+              <div className="h-44 flex items-end gap-3 sm:gap-6 justify-between px-2 border-b border-slate-800 pb-2">
+                {recentSessions.map((session, idx) => {
+                  const actualHeight = Math.min(100, Math.round(((session.actualHours || 0) / maxDayHours) * 100));
+                  const targetHeight = Math.min(100, Math.round(((session.targetHours || 0) / maxDayHours) * 100));
+                  const acc = session.questionsAttempted > 0 ? Math.round((session.questionsCorrect / session.questionsAttempted) * 100) : 0;
+                  const qph = session.actualHours > 0 ? (session.questionsAttempted / session.actualHours).toFixed(0) : '0';
+
+                  return (
+                    <div key={session.id || idx} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group relative">
+                      
+                      {/* Tooltip on hover */}
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none absolute -top-12 z-20 bg-slate-950 border border-slate-700 text-white text-[10px] font-mono px-2 py-1 rounded shadow-xl whitespace-nowrap">
+                        {session.actualHours}h actual / {session.targetHours}h target · {session.questionsAttempted}Q ({acc}%)
+                      </div>
+
+                      {/* Accuracy Pill */}
+                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                        acc >= 80 ? 'text-emerald-300 bg-emerald-950/80 border border-emerald-800/60' :
+                        acc >= 60 ? 'text-cyan-300 bg-cyan-950/80 border border-cyan-800/60' :
+                        'text-amber-300 bg-amber-950/80 border border-amber-800/60'
+                      }`}>
+                        {acc}%
+                      </span>
+
+                      {/* Bars Container */}
+                      <div className="w-full flex items-end justify-center gap-1.5 h-28">
+                        {/* Target Bar Outline */}
+                        <div 
+                          className="w-2.5 sm:w-3.5 bg-slate-800/80 rounded-t-sm transition-all"
+                          style={{ height: `${Math.max(8, targetHeight)}%` }}
+                          title={`Target: ${session.targetHours}h`}
+                        />
+                        {/* Actual Bar */}
+                        <div 
+                          className="w-3.5 sm:w-5 bg-gradient-to-t from-cyan-600 to-blue-500 rounded-t-sm shadow-sm transition-all group-hover:from-cyan-400 group-hover:to-blue-400"
+                          style={{ height: `${Math.max(10, actualHeight)}%` }}
+                          title={`Actual: ${session.actualHours}h`}
+                        />
+                      </div>
+
+                      {/* Date & Exam Badge */}
+                      <div className="flex flex-col items-center text-center">
+                        <span className="text-[10px] font-mono text-slate-300">
+                          {session.date.slice(5)}
+                        </span>
+                        <span className={`text-[9px] font-mono font-semibold px-1 rounded ${
+                          session.examFocus === 'JEE' ? 'text-blue-400' : 'text-purple-400'
+                        }`}>
+                          {session.examFocus}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Chart Footnote */}
+              <div className="flex flex-wrap items-center justify-between text-[11px] font-mono text-slate-400 pt-2 px-1">
+                <span>Last {recentSessions.length} Study Days</span>
+                <span>Average Speed: <strong className="text-cyan-300">{analytics.questionsPerHour} Q/hr</strong></span>
+              </div>
+            </div>
+          )}
+        </div>
+
+      </div>
+
+      {/* Row 1.7: Subject Balance (3:2 Ratio) & Curricular Health Visual Spectrum */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        {/* Subject Question Allocation */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+              <PieChart className="w-4 h-4 text-cyan-400" />
+              Curricular Subject Allocation (Physics · Chem · Math)
+            </h3>
+            <span className="text-xs font-mono text-slate-400">
+              Ratio Target: <strong className="text-cyan-300">{currentWeek.allocationRatio}</strong>
+            </span>
+          </div>
+
+          {/* Segmented Bar */}
+          <div className="h-3.5 rounded-full overflow-hidden flex bg-slate-950 border border-slate-800">
+            <div style={{ width: `${physicsPct}%` }} className="bg-cyan-500 transition-all" title={`Physics: ${physicsPct}%`} />
+            <div style={{ width: `${chemPct}%` }} className="bg-amber-500 transition-all" title={`Chemistry: ${chemPct}%`} />
+            <div style={{ width: `${mathPct}%` }} className="bg-purple-500 transition-all" title={`Mathematics: ${mathPct}%`} />
+          </div>
+
+          {/* Subject Pills */}
+          <div className="grid grid-cols-3 gap-2 font-mono text-xs pt-1">
+            <div className="p-2.5 rounded-xl bg-slate-950/60 border border-cyan-900/40">
+              <div className="flex justify-between items-center text-cyan-400 font-semibold mb-0.5">
+                <span>Physics</span>
+                <span>{physicsPct}%</span>
+              </div>
+              <span className="text-[10px] text-slate-400">{physicsAttempts} questions</span>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-slate-950/60 border border-amber-900/40">
+              <div className="flex justify-between items-center text-amber-400 font-semibold mb-0.5">
+                <span>Chemistry</span>
+                <span>{chemPct}%</span>
+              </div>
+              <span className="text-[10px] text-slate-400">{chemAttempts} questions</span>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-slate-950/60 border border-purple-900/40">
+              <div className="flex justify-between items-center text-purple-400 font-semibold mb-0.5">
+                <span>Mathematics</span>
+                <span>{mathPct}%</span>
+              </div>
+              <span className="text-[10px] text-slate-400">{mathAttempts} questions</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Curricular Risk Spectrum */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+              <Layers className="w-4 h-4 text-emerald-400" />
+              Syllabus Coverage & Vulnerability Matrix
+            </h3>
+            <span className="text-xs font-mono text-slate-400">
+              {analytics.chapterMetrics.length} Chapters Total
+            </span>
+          </div>
+
+          {/* Segmented Bar */}
+          <div className="h-3.5 rounded-full overflow-hidden flex bg-slate-950 border border-slate-800">
+            <div style={{ width: `${(strongCount / analytics.chapterMetrics.length) * 100}%` }} className="bg-emerald-500 transition-all" title="Strong" />
+            <div style={{ width: `${(warningCount / analytics.chapterMetrics.length) * 100}%` }} className="bg-amber-500 transition-all" title="Warning" />
+            <div style={{ width: `${(criticalCount / analytics.chapterMetrics.length) * 100}%` }} className="bg-rose-500 transition-all" title="Critical" />
+            <div style={{ width: `${(untestedCount / analytics.chapterMetrics.length) * 100}%` }} className="bg-slate-700 transition-all" title="Untested" />
+          </div>
+
+          {/* 4 Status Cards */}
+          <div className="grid grid-cols-4 gap-2 font-mono text-xs pt-1">
+            <div className="p-2 rounded-xl bg-slate-950/60 border border-emerald-900/40 text-center">
+              <span className="text-emerald-400 font-bold text-sm block">{strongCount}</span>
+              <span className="text-[10px] text-slate-400">Strong</span>
+            </div>
+
+            <div className="p-2 rounded-xl bg-slate-950/60 border border-amber-900/40 text-center">
+              <span className="text-amber-400 font-bold text-sm block">{warningCount}</span>
+              <span className="text-[10px] text-slate-400">Warning</span>
+            </div>
+
+            <div className="p-2 rounded-xl bg-slate-950/60 border border-rose-900/40 text-center">
+              <span className="text-rose-400 font-bold text-sm block">{criticalCount}</span>
+              <span className="text-[10px] text-slate-400">Critical</span>
+            </div>
+
+            <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800 text-center">
+              <span className="text-slate-300 font-bold text-sm block">{untestedCount}</span>
+              <span className="text-[10px] text-slate-500">Untested</span>
+            </div>
           </div>
         </div>
 

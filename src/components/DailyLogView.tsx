@@ -16,8 +16,9 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { StudyDay, ErrorRecord, ExamFocus, DayType, ErrorType, ConfidenceLevel } from '../types';
+import { StudyDay, ErrorRecord, ExamFocus, DayType, ErrorType, ConfidenceLevel, DailyTask } from '../types';
 import { CANONICAL_CURRICULUM } from '../data/seedData';
+import { DailyGoalsTracker } from './DailyGoalsTracker';
 
 interface DailyLogViewProps {
   studyDays: StudyDay[];
@@ -43,6 +44,7 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
   const [examFocus, setExamFocus] = useState<ExamFocus>('JEE');
   const [dayType, setDayType] = useState<DayType>('NORMAL');
   const [context, setContext] = useState('');
+  const [currentTasks, setCurrentTasks] = useState<DailyTask[]>([]);
   
   // Time metrics
   const [targetHours, setTargetHours] = useState('');
@@ -188,6 +190,7 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
         // Photos remain local to the device; host receives structured data only
         notebookImages: [],
         errorRecords: extractedErrors,
+        dailyTasks: currentTasks,
         feedbackLoopEnabledOnSubmit: feedbackLoopEnabled
       });
       setIsModalOpen(false);
@@ -224,9 +227,16 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
           className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold text-xs font-mono tracking-wide shadow-lg shadow-cyan-500/25 flex items-center justify-center gap-2 transition-all self-start sm:self-auto"
         >
           <Plus className="w-4 h-4" />
-          + Record New Day
+          Record New Day
         </button>
       </div>
+
+      {/* Daily Study Goals & To-Do Tracker (Interactive Planner & Progress Tracker) */}
+      <DailyGoalsTracker
+        selectedDate={date}
+        onDateChange={setDate}
+        onTasksChange={setCurrentTasks}
+      />
 
       {/* Logged Days List */}
       <div className="space-y-4">
@@ -331,6 +341,36 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
                         <div className="text-slate-200 font-semibold">{day.questionsSkipped} (Guessed: {day.guessedQuestions})</div>
                       </div>
                     </div>
+
+                    {/* Daily Tasks / Goals Logged for this Day */}
+                    {day.dailyTasks && day.dailyTasks.length > 0 && (
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                            <Target className="w-3.5 h-3.5 text-cyan-400" />
+                            Session Study Goals ({day.dailyTasks.filter(t => t.completed).length}/{day.dailyTasks.length} Completed)
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-xs">
+                          {day.dailyTasks.map(task => (
+                            <div 
+                              key={task.id} 
+                              className={`p-2 rounded-lg border flex items-center justify-between gap-2 ${
+                                task.completed ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-300' : 'bg-slate-900 border-slate-800 text-slate-400'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                {task.completed ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <div className="w-3.5 h-3.5 rounded-full border border-slate-600 shrink-0" />}
+                                <span className={`truncate text-[11px] ${task.completed ? 'line-through text-slate-400' : 'text-slate-200'}`}>
+                                  {task.title}
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-slate-500 shrink-0">{task.targetMinutes}m</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Error Records list */}
                     <div>

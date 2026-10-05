@@ -6,7 +6,7 @@
 # Example: https://your-python-backend.onrender.com
 [[redirects]]
   from = "/api/*"
-  to = "https://djikstra-f6sw.onrender.com/:splat"
+  to = "https://djikstra-f6sw.onrender.com/api/:splat"
   status = 200
   force = true
 

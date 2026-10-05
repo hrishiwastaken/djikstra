@@ -59,10 +59,23 @@ export interface StudyDay {
   notebookImages: string[];
   errorRecords: ErrorRecord[];
   
+  // Daily goals and to-do list
+  dailyTasks?: DailyTask[];
+
   // Provenance & switch audit
   feedbackLoopEnabledOnSubmit: boolean;
   processingStatus: 'completed' | 'pending' | 'fast_capture_only';
   createdAt: string;
+}
+
+export interface DailyTask {
+  id: string;
+  title: string;
+  subject?: 'Physics' | 'Chemistry' | 'Mathematics' | 'Mock' | 'General';
+  targetMinutes?: number;
+  completed: boolean;
+  priority?: 'high' | 'medium' | 'low';
+  createdAt?: string;
 }
 
 export interface SubjectBenchmarkBreakdown {
@@ -230,3 +243,15 @@ export interface AISetupConfig {
   ocrConfigured?: boolean;
   thinkingConfigured?: boolean;
 }
+
+export interface AuthUser {
+  id: string;
+  username: string;
+  createdAt: string;
+}
+
+export interface AuthSession {
+  token: string;
+  user: AuthUser;
+}
+

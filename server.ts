@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import { 
@@ -46,34 +47,137 @@ app.use(express.json({ limit: '50mb' }));
 // Persistent JSON file database path
 const DB_FILE = path.join(__dirname, 'data', 'db.json');
 
-// In-memory + file-backed persistent database store
-let weeks: PreparationWeek[] = JSON.parse(JSON.stringify(INITIAL_WEEKS));
-let studyDays: StudyDay[] = JSON.parse(JSON.stringify(INITIAL_STUDY_DAYS));
-let reports: Record<string, WeeklyAiReport> = JSON.parse(JSON.stringify(INITIAL_AI_REPORTS));
+export interface StoredUser {
+  id: string;
+  username: string;
+  passwordHash: string;
+  createdAt: string;
+}
 
-// AI Model Settings Store
-let aiSettings = {
-  ocrProvider: 'gemini' as 'gemini' | 'openai_compatible',
-  ocrApiKey: process.env.GEMINI_API_KEY || '',
-  ocrModel: 'gemini-3.8-flash',
-  ocrBaseUrl: 'https://openrouter.ai/api/v1',
-  
-  thinkingProvider: 'gemini' as 'gemini' | 'openai_compatible',
-  thinkingApiKey: process.env.GEMINI_API_KEY || '',
-  thinkingModel: 'gemini-3.8-flash',
-  thinkingBaseUrl: 'https://openrouter.ai/api/v1'
-};
+export interface UserScopeData {
+  weeks: PreparationWeek[];
+  studyDays: StudyDay[];
+  reports: Record<string, WeeklyAiReport>;
+  aiSettings: {
+    ocrProvider: 'gemini' | 'openai_compatible';
+    ocrApiKey: string;
+    ocrModel: string;
+    ocrBaseUrl: string;
+    thinkingProvider: 'gemini' | 'openai_compatible';
+    thinkingApiKey: string;
+    thinkingModel: string;
+    thinkingBaseUrl: string;
+  };
+}
+
+let users: Record<string, StoredUser> = {};
+let sessions: Record<string, string> = {}; // token -> userId
+let userData: Record<string, UserScopeData> = {};
+
+function hashPassword(password: string): string {
+  return crypto.createHash('sha256').update(password + '_dijkstra_salt_2026').digest('hex');
+}
+
+function generateToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// On account creation, everything is ZERO on the database for account
+function createCleanUserScope(): UserScopeData {
+  return {
+    weeks: [
+      {
+        id: '2026-W40',
+        title: 'Cycle 1 (Fresh Preparation Cycle)',
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+        jeeDays: 3,
+        cetDays: 2,
+        allocationRatio: '3:2',
+        benchmarkExam: 'JEE',
+        targetWeeklyHours: 30,
+        status: 'active'
+      }
+    ],
+    studyDays: [], // Completely 0 study days
+    reports: {},   // Completely 0 reports
+    aiSettings: {
+      ocrProvider: 'gemini',
+      ocrApiKey: '',
+      ocrModel: 'gemini-3.8-flash',
+      ocrBaseUrl: 'https://openrouter.ai/api/v1',
+      thinkingProvider: 'gemini',
+      thinkingApiKey: '',
+      thinkingModel: 'gemini-3.8-flash',
+      thinkingBaseUrl: 'https://openrouter.ai/api/v1'
+    }
+  };
+}
+
+function getAuthScope(req: express.Request): { userId: string; user: StoredUser | null; data: UserScopeData } {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') 
+    ? authHeader.slice(7).trim() 
+    : (req.headers['x-auth-token'] as string)?.trim();
+
+  if (token && sessions[token]) {
+    const userId = sessions[token];
+    const user = users[userId];
+    if (user) {
+      if (!userData[userId]) {
+        userData[userId] = createCleanUserScope();
+      }
+      return { userId, user, data: userData[userId] };
+    }
+  }
+
+  // Fallback to 'default' scope for unauthenticated or legacy calls
+  if (!userData['default']) {
+    userData['default'] = {
+      weeks: JSON.parse(JSON.stringify(INITIAL_WEEKS)),
+      studyDays: JSON.parse(JSON.stringify(INITIAL_STUDY_DAYS)),
+      reports: JSON.parse(JSON.stringify(INITIAL_AI_REPORTS)),
+      aiSettings: {
+        ocrProvider: 'gemini',
+        ocrApiKey: process.env.GEMINI_API_KEY || '',
+        ocrModel: 'gemini-3.8-flash',
+        ocrBaseUrl: 'https://openrouter.ai/api/v1',
+        thinkingProvider: 'gemini',
+        thinkingApiKey: process.env.GEMINI_API_KEY || '',
+        thinkingModel: 'gemini-3.8-flash',
+        thinkingBaseUrl: 'https://openrouter.ai/api/v1'
+      }
+    };
+  }
+  return { userId: 'default', user: null, data: userData['default'] };
+}
 
 function loadDatabase() {
   try {
     if (fs.existsSync(DB_FILE)) {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
       const data = JSON.parse(raw);
-      if (Array.isArray(data.weeks) && data.weeks.length > 0) weeks = data.weeks;
-      if (Array.isArray(data.studyDays)) studyDays = data.studyDays;
-      if (data.reports) reports = data.reports;
-      if (data.aiSettings) {
-        aiSettings = { ...aiSettings, ...data.aiSettings };
+      if (data.users) users = data.users;
+      if (data.sessions) sessions = data.sessions;
+      if (data.userData) userData = data.userData;
+
+      // Migration for legacy top-level data
+      if (!userData['default'] && (data.weeks || data.studyDays)) {
+        userData['default'] = {
+          weeks: Array.isArray(data.weeks) ? data.weeks : INITIAL_WEEKS,
+          studyDays: Array.isArray(data.studyDays) ? data.studyDays : INITIAL_STUDY_DAYS,
+          reports: data.reports || INITIAL_AI_REPORTS,
+          aiSettings: data.aiSettings || {
+            ocrProvider: 'gemini',
+            ocrApiKey: process.env.GEMINI_API_KEY || '',
+            ocrModel: 'gemini-3.8-flash',
+            ocrBaseUrl: 'https://openrouter.ai/api/v1',
+            thinkingProvider: 'gemini',
+            thinkingApiKey: process.env.GEMINI_API_KEY || '',
+            thinkingModel: 'gemini-3.8-flash',
+            thinkingBaseUrl: 'https://openrouter.ai/api/v1'
+          }
+        };
       }
     }
   } catch (err) {
@@ -86,17 +190,9 @@ function saveDatabase() {
     const dir = path.dirname(DB_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(DB_FILE, JSON.stringify({
-      weeks,
-      studyDays,
-      reports,
-      aiSettings: {
-        ocrProvider: aiSettings.ocrProvider,
-        ocrModel: aiSettings.ocrModel,
-        ocrBaseUrl: aiSettings.ocrBaseUrl,
-        thinkingProvider: aiSettings.thinkingProvider,
-        thinkingModel: aiSettings.thinkingModel,
-        thinkingBaseUrl: aiSettings.thinkingBaseUrl
-      }
+      users,
+      sessions,
+      userData
     }, null, 2));
   } catch (err) {
     console.warn('Could not save to db.json:', err);
@@ -314,9 +410,114 @@ function calculateAnalytics(filteredDays: StudyDay[]): SystemAnalytics {
 }
 
 // -------------------------------------------------------------
-// Settings & Key Management Endpoints
+// Authentication Endpoints (Register, Login, Session)
+// -------------------------------------------------------------
+app.post('/api/auth/register', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !username.trim() || !password || !password.trim()) {
+    return res.status(400).json({ success: false, error: 'Username and password are required.' });
+  }
+
+  const cleanUsername = username.trim();
+  const lowerUser = cleanUsername.toLowerCase();
+
+  const userExists = Object.values(users).some(u => u.username.toLowerCase() === lowerUser);
+  if (userExists) {
+    return res.status(400).json({ success: false, error: 'Username is already taken. Please choose another username.' });
+  }
+
+  const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const newUser: StoredUser = {
+    id: userId,
+    username: cleanUsername,
+    passwordHash: hashPassword(password.trim()),
+    createdAt: new Date().toISOString()
+  };
+
+  users[userId] = newUser;
+  // On creation everything is zero on the database for account
+  userData[userId] = createCleanUserScope();
+
+  const token = generateToken();
+  sessions[token] = userId;
+
+  saveDatabase();
+
+  res.status(201).json({
+    success: true,
+    token,
+    user: {
+      id: newUser.id,
+      username: newUser.username,
+      createdAt: newUser.createdAt
+    }
+  });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ success: false, error: 'Username and password are required.' });
+  }
+
+  const cleanUsername = username.trim().toLowerCase();
+  const user = Object.values(users).find(u => u.username.toLowerCase() === cleanUsername);
+
+  if (!user || user.passwordHash !== hashPassword(password.trim())) {
+    return res.status(401).json({ success: false, error: 'Invalid username or password.' });
+  }
+
+  const token = generateToken();
+  sessions[token] = user.id;
+
+  saveDatabase();
+
+  res.json({
+    success: true,
+    token,
+    user: {
+      id: user.id,
+      username: user.username,
+      createdAt: user.createdAt
+    }
+  });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  const scope = getAuthScope(req);
+  if (!scope.user) {
+    return res.status(401).json({ success: false, error: 'Not authenticated' });
+  }
+  res.json({
+    success: true,
+    user: {
+      id: scope.user.id,
+      username: scope.user.username,
+      createdAt: scope.user.createdAt
+    }
+  });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') 
+    ? authHeader.slice(7).trim() 
+    : (req.headers['x-auth-token'] as string)?.trim();
+
+  if (token && sessions[token]) {
+    delete sessions[token];
+    saveDatabase();
+  }
+  res.json({ success: true, message: 'Logged out successfully' });
+});
+
+// -------------------------------------------------------------
+// Settings & Key Management Endpoints (User-Scoped)
 // -------------------------------------------------------------
 app.get('/api/settings', (req, res) => {
+  const scope = getAuthScope(req);
+  const aiSettings = scope.data.aiSettings;
+
   res.json({
     ocrProvider: aiSettings.ocrProvider,
     ocrModel: aiSettings.ocrModel,
@@ -333,6 +534,8 @@ app.get('/api/settings', (req, res) => {
 });
 
 app.post('/api/settings', (req, res) => {
+  const scope = getAuthScope(req);
+  const aiSettings = scope.data.aiSettings;
   const { 
     ocrProvider, 
     ocrApiKey, 
@@ -358,13 +561,15 @@ app.post('/api/settings', (req, res) => {
 
   res.json({
     success: true,
-    message: 'AI Model configuration saved',
+    message: 'AI Model configuration saved for your account',
     ocrConfigured: Boolean(aiSettings.ocrApiKey),
     thinkingConfigured: Boolean(aiSettings.thinkingApiKey)
   });
 });
 
 app.post('/api/settings/test-ocr', async (req, res) => {
+  const scope = getAuthScope(req);
+  const aiSettings = scope.data.aiSettings;
   const { ocrProvider, ocrApiKey, ocrModel, ocrBaseUrl } = req.body;
   const provider = ocrProvider || aiSettings.ocrProvider;
   const key = (ocrApiKey !== undefined && ocrApiKey.trim()) ? ocrApiKey.trim() : aiSettings.ocrApiKey;
@@ -406,6 +611,8 @@ app.post('/api/settings/test-ocr', async (req, res) => {
 });
 
 app.post('/api/settings/test-thinking', async (req, res) => {
+  const scope = getAuthScope(req);
+  const aiSettings = scope.data.aiSettings;
   const { thinkingProvider, thinkingApiKey, thinkingModel, thinkingBaseUrl } = req.body;
   const provider = thinkingProvider || aiSettings.thinkingProvider;
   const key = (thinkingApiKey !== undefined && thinkingApiKey.trim()) ? thinkingApiKey.trim() : aiSettings.thinkingApiKey;
@@ -447,13 +654,16 @@ app.post('/api/settings/test-thinking', async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// Core Prep Endpoints
+// Core Prep Endpoints (User-Scoped)
 // -------------------------------------------------------------
 app.get('/api/weeks', (req, res) => {
-  res.json(weeks);
+  const scope = getAuthScope(req);
+  res.json(scope.data.weeks);
 });
 
 app.post('/api/weeks', (req, res) => {
+  const scope = getAuthScope(req);
+  const weeks = scope.data.weeks;
   const newWeek: PreparationWeek = {
     id: req.body.id || `2026-W${weeks.length + 40}`,
     title: req.body.title || `Cycle ${weeks.length + 1}`,
@@ -478,20 +688,22 @@ app.post('/api/weeks', (req, res) => {
 });
 
 app.get('/api/days', (req, res) => {
+  const scope = getAuthScope(req);
   const { weekId } = req.query;
   if (weekId) {
-    return res.json(studyDays.filter(d => d.weekId === weekId));
+    return res.json(scope.data.studyDays.filter(d => d.weekId === weekId));
   }
-  res.json(studyDays);
+  res.json(scope.data.studyDays);
 });
 
 app.post('/api/days', (req, res) => {
+  const scope = getAuthScope(req);
   const dayData = req.body;
   const feedbackLoopOn = Boolean(dayData.feedbackLoopEnabledOnSubmit);
 
   const newDay: StudyDay = {
     id: dayData.id || `day_${Date.now()}`,
-    weekId: dayData.weekId || weeks[0]?.id || '2026-W40',
+    weekId: dayData.weekId || scope.data.weeks[0]?.id || '2026-W40',
     date: dayData.date || new Date().toISOString().split('T')[0],
     examFocus: dayData.examFocus || 'JEE',
     dayType: dayData.dayType || 'NORMAL',
@@ -507,18 +719,19 @@ app.post('/api/days', (req, res) => {
     questionsWrong: Number(dayData.questionsWrong || 0),
     questionsSkipped: Number(dayData.questionsSkipped || 0),
     guessedQuestions: Number(dayData.guessedQuestions || 0),
-    notebookImages: dayData.notebookImages || [],
+    notebookImages: [], // Device-local storage
     errorRecords: (dayData.errorRecords || []).map((err: any, idx: number) => ({
       ...err,
       id: err.id || `err_${Date.now()}_${idx}`,
       createdAt: err.createdAt || new Date().toISOString()
     })),
+    dailyTasks: Array.isArray(dayData.dailyTasks) ? dayData.dailyTasks : [],
     feedbackLoopEnabledOnSubmit: feedbackLoopOn,
     processingStatus: feedbackLoopOn ? 'completed' : 'fast_capture_only',
     createdAt: new Date().toISOString()
   };
 
-  studyDays.unshift(newDay);
+  scope.data.studyDays.unshift(newDay);
   saveDatabase();
 
   res.status(201).json({
@@ -530,6 +743,8 @@ app.post('/api/days', (req, res) => {
 
 // POST extract structured error records from notebook photo (AI Vision / OCR Stage)
 app.post('/api/extract-errors', async (req, res) => {
+  const scope = getAuthScope(req);
+  const aiSettings = scope.data.aiSettings;
   const { imageBase64, rawTextNote } = req.body;
 
   if (!imageBase64 && !rawTextNote) {
@@ -678,15 +893,20 @@ Return a JSON object containing a "records" array. Each item must have:
 
 // GET weekly AI report
 app.get('/api/weekly-report/:weekId', (req, res) => {
+  const scope = getAuthScope(req);
   const { weekId } = req.params;
-  if (reports[weekId]) {
-    return res.json(reports[weekId]);
+  if (scope.data.reports[weekId]) {
+    return res.json(scope.data.reports[weekId]);
   }
   res.status(404).json({ error: 'No report generated yet for this cycle' });
 });
 
 // POST generate weekly AI report (Thinking / Reasoning Stage)
 app.post('/api/weekly-report/:weekId/generate', async (req, res) => {
+  const scope = getAuthScope(req);
+  const aiSettings = scope.data.aiSettings;
+  const weeks = scope.data.weeks;
+  const studyDays = scope.data.studyDays;
   const { weekId } = req.params;
   const week = weeks.find(w => w.id === weekId);
   if (!week) {
@@ -898,7 +1118,7 @@ Use only the supplied evidence.`;
       provenanceTraces
     };
 
-    reports[weekId] = newReport;
+    scope.data.reports[weekId] = newReport;
     saveDatabase();
     res.json(newReport);
   } catch (err: any) {
@@ -908,18 +1128,20 @@ Use only the supplied evidence.`;
 });
 
 app.post('/api/benchmarks', (req, res) => {
+  const scope = getAuthScope(req);
   const bm: BenchmarkTest = req.body;
-  const weekIdx = weeks.findIndex(w => w.id === bm.weekId);
+  const weekIdx = scope.data.weeks.findIndex(w => w.id === bm.weekId);
   if (weekIdx >= 0) {
-    weeks[weekIdx].benchmark = bm;
+    scope.data.weeks[weekIdx].benchmark = bm;
     saveDatabase();
   }
   res.json({ success: true, benchmark: bm });
 });
 
 app.get('/api/analytics', (req, res) => {
+  const scope = getAuthScope(req);
   const { weekId } = req.query;
-  const filteredDays = weekId ? studyDays.filter(d => d.weekId === weekId) : studyDays;
+  const filteredDays = weekId ? scope.data.studyDays.filter(d => d.weekId === weekId) : scope.data.studyDays;
   const analytics = calculateAnalytics(filteredDays);
   res.json(analytics);
 });

@@ -20,6 +20,19 @@ interface AISetupViewProps {
   onSettingsSaved: () => void;
 }
 
+function getAuthHeaders(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem('dijkstra_auth_session');
+    if (raw) {
+      const sess = JSON.parse(raw);
+      if (sess.token) {
+        return { Authorization: `Bearer ${sess.token}` };
+      }
+    }
+  } catch {}
+  return {};
+}
+
 export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => {
   // OCR Model State
   const [ocrProvider, setOcrProvider] = useState<'gemini' | 'openai_compatible'>('gemini');
@@ -79,7 +92,7 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
 
   // Load existing configuration on mount
   useEffect(() => {
-    fetch('/api/settings')
+    fetch('/api/settings', { headers: { ...getAuthHeaders() } })
       .then(res => {
         if (!res.ok) throw new Error('Not ok');
         return res.json();
@@ -125,7 +138,7 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
     try {
       const res = await fetch('/api/settings/test-ocr', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           ocrProvider,
           ocrApiKey: ocrApiKey || undefined,
@@ -181,7 +194,7 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
     try {
       const res = await fetch('/api/settings/test-thinking', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           thinkingProvider,
           thinkingApiKey: thinkingApiKey || undefined,
@@ -249,7 +262,7 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
     try {
       const res = await fetch('/api/settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           ocrProvider,
           ocrApiKey: ocrApiKey || undefined,

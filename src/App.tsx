@@ -8,6 +8,8 @@ import { CurriculumView } from './components/CurriculumView';
 import { AISetupView } from './components/AISetupView';
 import { ProvenanceModal } from './components/ProvenanceModal';
 import { NewWeekModal } from './components/NewWeekModal';
+import { AuthScreen } from './components/AuthScreen';
+import { CsvImportModal } from './components/CsvImportModal';
 import { 
   PreparationWeek, 
   StudyDay, 
@@ -15,11 +17,23 @@ import {
   SystemAnalytics, 
   BenchmarkTest, 
   ProvenanceTrace,
-  ChapterMetric
+  ChapterMetric,
+  AuthSession,
+  AuthUser
 } from './types';
 import { INITIAL_WEEKS, INITIAL_STUDY_DAYS, INITIAL_AI_REPORTS, CANONICAL_CURRICULUM } from './data/seedData';
 
 export function App() {
+  // Authentication state (Saved in localStorage so user doesn't have to log in all the time)
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => {
+    try {
+      const saved = localStorage.getItem('dijkstra_auth_session');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const [weeks, setWeeks] = useState<PreparationWeek[]>(() => {
     try {
       const saved = localStorage.getItem('dijkstra_weeks');
@@ -43,6 +57,9 @@ export function App() {
   const [activeReport, setActiveReport] = useState<WeeklyAiReport | null>(null);
   const [feedbackLoopEnabled, setFeedbackLoopEnabled] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+
+  // CSV Modal State
+  const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
 
   // Sync to localStorage
   useEffect(() => {
@@ -73,20 +90,37 @@ export function App() {
   const activeDays = studyDays.filter(d => d.weekId === selectedWeekId);
   const currentWeek = weeks.find(w => w.id === selectedWeekId) || weeks[0] || INITIAL_WEEKS[0];
 
-  // Fetch initial data from server API
+  // Helper for Authenticated Fetch
+  const authFetch = (url: string, options: RequestInit = {}) => {
+    const headers = new Headers(options.headers || {});
+    if (authSession?.token) {
+      headers.set('Authorization', `Bearer ${authSession.token}`);
+    }
+    return fetch(url, { ...options, headers });
+  };
+
+  // Fetch initial data from server API for this account
   const refreshData = async () => {
+    if (!authSession) return;
     try {
       const [weeksRes, daysRes] = await Promise.all([
-        fetch('/api/weeks'),
-        fetch('/api/days')
+        authFetch('/api/weeks'),
+        authFetch('/api/days')
       ]);
       if (weeksRes.ok) {
         const wData = await weeksRes.json();
-        if (Array.isArray(wData) && wData.length > 0) setWeeks(wData);
+        if (Array.isArray(wData) && wData.length > 0) {
+          setWeeks(wData);
+          if (!wData.some(w => w.id === selectedWeekId)) {
+            setSelectedWeekId(wData[0].id);
+          }
+        }
       }
       if (daysRes.ok) {
         const dData = await daysRes.json();
-        if (Array.isArray(dData)) setStudyDays(dData);
+        if (Array.isArray(dData)) {
+          setStudyDays(dData);
+        }
       }
     } catch (err) {
       console.warn('Backend fetch failed, using memory state:', err);
@@ -95,29 +129,41 @@ export function App() {
 
   // Load report for the selected cycle
   useEffect(() => {
+    if (!authSession) return;
     const fetchReport = async () => {
       try {
-        const res = await fetch(`/api/weekly-report/${selectedWeekId}`);
+        const res = await authFetch(`/api/weekly-report/${selectedWeekId}`);
         if (res.ok) {
           const rep = await res.json();
           setActiveReport(rep);
-        } else if (selectedWeekId === '2026-W39' && INITIAL_AI_REPORTS['2026-W39']) {
-          setActiveReport(INITIAL_AI_REPORTS['2026-W39']);
         } else {
           setActiveReport(null);
         }
       } catch (err) {
-        if (INITIAL_AI_REPORTS[selectedWeekId]) {
-          setActiveReport(INITIAL_AI_REPORTS[selectedWeekId]);
-        }
+        setActiveReport(null);
       }
     };
     fetchReport();
-  }, [selectedWeekId]);
+  }, [selectedWeekId, authSession]);
 
   useEffect(() => {
-    refreshData();
-  }, []);
+    if (authSession) {
+      refreshData();
+    }
+  }, [authSession]);
+
+  const handleLogout = async () => {
+    try {
+      if (authSession?.token) {
+        await authFetch('/api/auth/logout', { method: 'POST' });
+      }
+    } catch {}
+    localStorage.removeItem('dijkstra_auth_session');
+    setAuthSession(null);
+    setStudyDays([]);
+    setWeeks(INITIAL_WEEKS);
+    setActiveReport(null);
+  };
 
   // Calculate local deterministic analytics
   const computeClientAnalytics = (days: StudyDay[]): SystemAnalytics => {
@@ -257,7 +303,7 @@ export function App() {
   // Handlers
   const handleSaveDay = async (newDayData: Partial<StudyDay>) => {
     try {
-      const res = await fetch('/api/days', {
+      const res = await authFetch('/api/days', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newDayData)
@@ -268,7 +314,7 @@ export function App() {
       } else {
         // Fallback local state
         const localDay: StudyDay = {
-          id: `day_${Date.now()}`,
+          id: newDayData.id || `day_${Date.now()}`,
           weekId: newDayData.weekId || selectedWeekId,
           date: newDayData.date || new Date().toISOString().split('T')[0],
           examFocus: newDayData.examFocus || 'JEE',
@@ -300,7 +346,7 @@ export function App() {
 
   const handleSaveBenchmark = async (benchmark: BenchmarkTest) => {
     try {
-      await fetch('/api/benchmarks', {
+      await authFetch('/api/benchmarks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(benchmark)
@@ -316,7 +362,7 @@ export function App() {
     if (updated) {
       const newWeekObj = { ...updated, allocationRatio: ratio as any, jeeDays, cetDays };
       try {
-        await fetch('/api/weeks', {
+        await authFetch('/api/weeks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newWeekObj)
@@ -330,7 +376,7 @@ export function App() {
 
   const handleSaveWeek = async (weekPartial: Partial<PreparationWeek>) => {
     try {
-      const res = await fetch('/api/weeks', {
+      const res = await authFetch('/api/weeks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(weekPartial)
@@ -348,7 +394,7 @@ export function App() {
   const handleRegenerateReport = async () => {
     setIsGeneratingReport(true);
     try {
-      const res = await fetch(`/api/weekly-report/${selectedWeekId}/generate`, {
+      const res = await authFetch(`/api/weekly-report/${selectedWeekId}/generate`, {
         method: 'POST'
       });
       if (res.ok) {
@@ -361,6 +407,18 @@ export function App() {
       setIsGeneratingReport(false);
     }
   };
+
+  const handleImportDays = async (importedDays: Partial<StudyDay>[]) => {
+    for (const day of importedDays) {
+      await handleSaveDay(day);
+    }
+    await refreshData();
+  };
+
+  // Auth Gate: Require username/password login before accessing data
+  if (!authSession) {
+    return <AuthScreen onAuthenticated={(session) => setAuthSession(session)} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -375,6 +433,9 @@ export function App() {
         onOpenNewWeekModal={() => setIsNewWeekModalOpen(true)}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
+        currentUser={authSession.user}
+        onLogout={handleLogout}
+        onOpenCsvModal={() => setIsCsvModalOpen(true)}
       />
 
       {/* Main Content Viewport */}
@@ -386,6 +447,8 @@ export function App() {
             studyDays={activeDays}
             onOpenNewDay={() => setIsNewDayModalOpen(true)}
             onNavigateToReport={() => setActiveTab('weekly-report')}
+            currentUser={authSession.user}
+            onNavigateToDailyLog={() => setActiveTab('daily-log')}
           />
         )}
 
@@ -453,6 +516,15 @@ export function App() {
         onClose={() => setIsNewWeekModalOpen(false)}
         onSaveWeek={handleSaveWeek}
         existingCount={weeks.length}
+      />
+
+      {/* CSV Data Pipeline Modal */}
+      <CsvImportModal
+        isOpen={isCsvModalOpen}
+        onClose={() => setIsCsvModalOpen(false)}
+        currentWeekId={selectedWeekId}
+        onImportDays={handleImportDays}
+        existingDays={studyDays}
       />
 
     </div>
