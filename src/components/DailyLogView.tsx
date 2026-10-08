@@ -16,9 +16,10 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { StudyDay, ErrorRecord, ExamFocus, DayType, ErrorType, ConfidenceLevel, DailyTask } from '../types';
+import { StudyDay, ErrorRecord, ExamFocus, DayType, ErrorType, ConfidenceLevel, DailyTask, AuthUser } from '../types';
 import { CANONICAL_CURRICULUM } from '../data/seedData';
 import { DailyGoalsTracker } from './DailyGoalsTracker';
+import { DiagnosticMistakeLogger } from './DiagnosticMistakeLogger';
 
 interface DailyLogViewProps {
   studyDays: StudyDay[];
@@ -27,6 +28,7 @@ interface DailyLogViewProps {
   onSaveDay: (newDay: Partial<StudyDay>) => Promise<void>;
   isModalOpen: boolean;
   setIsModalOpen: (open: boolean) => void;
+  currentUser?: AuthUser | null;
 }
 
 export const DailyLogView: React.FC<DailyLogViewProps> = ({
@@ -35,7 +37,8 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
   feedbackLoopEnabled,
   onSaveDay,
   isModalOpen,
-  setIsModalOpen
+  setIsModalOpen,
+  currentUser
 }) => {
   const [expandedDayId, setExpandedDayId] = useState<string | null>(studyDays[0]?.id || null);
 
@@ -61,97 +64,65 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
   const [questionsSkipped, setQuestionsSkipped] = useState('');
   const [guessedQuestions, setGuessedQuestions] = useState('');
 
-  // Notebook upload / extraction
+  // Zero-AI Diagnostic error records staged for this day session
+  const [sessionErrors, setSessionErrors] = useState<ErrorRecord[]>([]);
   const [uploadedImageBase64, setUploadedImageBase64] = useState<string | null>(null);
-  const [rawTextNote, setRawTextNote] = useState('');
-  const [isExtracting, setIsExtracting] = useState(false);
-  const [extractionError, setExtractionError] = useState('');
-  
-  // Confirmed / editable extracted records (Human review stage)
-  const [extractedErrors, setExtractedErrors] = useState<ErrorRecord[]>([]);
-  const [hasExtracted, setHasExtracted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Handle image upload from user computer / camera
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setUploadedImageBase64(reader.result as string);
-        setExtractionError('');
-      };
-      reader.readAsDataURL(file);
+  // Fast Calculation Helpers (Zero-AI, Instant Client Computations)
+  const sumDetailedHours = ((parseFloat(testingHours) || 0) + (parseFloat(analysisHours) || 0) + (parseFloat(otherHours) || 0)).toFixed(1);
+  const attNum = parseInt(questionsAttempted, 10) || 0;
+  const corNum = parseInt(questionsCorrect, 10) || 0;
+  const skipNum = parseInt(questionsSkipped, 10) || 0;
+  const calcWrong = Math.max(0, attNum - corNum - skipNum);
+  const liveAccuracy = attNum > 0 ? Math.round((corNum / attNum) * 100) : null;
+
+  const handleAutoSumHours = () => {
+    setActualHours(sumDetailedHours);
+  };
+
+  const handleAutoWrong = () => {
+    setQuestionsWrong(calcWrong.toString());
+  };
+
+  const applyTimePreset = (preset: 'standard' | 'school' | 'mock' | 'clear') => {
+    if (preset === 'standard') {
+      setTargetHours('6.0');
+      setAvailableHours('6.0');
+      setActualHours('6.0');
+      setTestingHours('3.0');
+      setAnalysisHours('2.0');
+      setOtherHours('1.0');
+      setDayType('NORMAL');
+    } else if (preset === 'school') {
+      setTargetHours('3.5');
+      setAvailableHours('4.0');
+      setActualHours('3.5');
+      setTestingHours('2.0');
+      setAnalysisHours('1.5');
+      setOtherHours('0.0');
+      setDayType('SCHOOL_HEAVY');
+    } else if (preset === 'mock') {
+      setTargetHours('8.0');
+      setAvailableHours('8.0');
+      setActualHours('8.0');
+      setTestingHours('4.0');
+      setAnalysisHours('3.0');
+      setOtherHours('1.0');
+      setDayType('SCHOOL_TEST');
+    } else {
+      setTargetHours('');
+      setAvailableHours('');
+      setActualHours('');
+      setTestingHours('');
+      setAnalysisHours('');
+      setOtherHours('');
+      setQuestionsAttempted('');
+      setQuestionsCorrect('');
+      setQuestionsWrong('');
+      setQuestionsSkipped('');
+      setGuessedQuestions('');
     }
-  };
-
-  // Run AI Extraction (Stage A of Pipeline)
-  const handleRunAiExtraction = async () => {
-    setIsExtracting(true);
-    setExtractionError('');
-    try {
-      const payload: any = {};
-      if (uploadedImageBase64) {
-        payload.imageBase64 = uploadedImageBase64;
-      }
-      if (rawTextNote) {
-        payload.rawTextNote = rawTextNote;
-      }
-
-      if (!uploadedImageBase64 && !rawTextNote) {
-        setExtractionError('Please upload a notebook photo or type notes before extracting.');
-        setIsExtracting(false);
-        return;
-      }
-
-      const res = await fetch('/api/extract-errors', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (res.ok && data.records) {
-        setExtractedErrors(data.records);
-        setHasExtracted(true);
-      } else {
-        setExtractionError(data.error || 'Extraction failed. Make sure your OCR API Key is configured in AI Setup.');
-      }
-    } catch (err: any) {
-      setExtractionError(err.message || 'Network error during AI extraction');
-    } finally {
-      setIsExtracting(false);
-    }
-  };
-
-  const handleUpdateExtractedField = (index: number, field: keyof ErrorRecord, value: any) => {
-    setExtractedErrors(prev => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
-      return copy;
-    });
-  };
-
-  const handleRemoveExtractedError = (index: number) => {
-    setExtractedErrors(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleAddManualError = () => {
-    const defaultChap = CANONICAL_CURRICULUM.Physics[0];
-    const newErr: ErrorRecord = {
-      id: `err_manual_${Date.now()}`,
-      subject: 'Physics',
-      chapter: defaultChap.chapter,
-      concept: defaultChap.concepts[0] || 'General Concept',
-      errorType: 'application',
-      description: '',
-      whyItHappened: '',
-      correctUnderstanding: '',
-      timeLostSeconds: 180,
-      confidenceLevel: 'wrong_uncertain',
-      createdAt: new Date().toISOString()
-    };
-    setExtractedErrors(prev => [...prev, newErr]);
-    setHasExtracted(true);
   };
 
   const handleSubmitDay = async (e: React.FormEvent) => {
@@ -189,17 +160,15 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
         guessedQuestions: parseInt(guessedQuestions, 10) || 0,
         // Photos remain local to the device; host receives structured data only
         notebookImages: [],
-        errorRecords: extractedErrors,
+        errorRecords: sessionErrors,
         dailyTasks: currentTasks,
         feedbackLoopEnabledOnSubmit: feedbackLoopEnabled
       });
       setIsModalOpen(false);
       // Reset form
-      setHasExtracted(false);
-      setExtractedErrors([]);
-      setRawTextNote('');
+      setSessionErrors([]);
       setUploadedImageBase64(null);
-      setExtractionError('');
+      setContext('');
     } catch (err) {
       console.error('Failed to save day:', err);
     } finally {
@@ -236,6 +205,7 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
         selectedDate={date}
         onDateChange={setDate}
         onTasksChange={setCurrentTasks}
+        userId={currentUser?.id}
       />
 
       {/* Logged Days List */}
@@ -546,11 +516,60 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
                 />
               </div>
 
+              {/* 1-Click Quick Time Presets */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs font-mono">
+                <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                  Rapid Day Presets:
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => applyTimePreset('standard')}
+                    className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 hover:border-cyan-500 hover:text-cyan-300 text-slate-300 text-[11px] transition-all"
+                  >
+                    Standard 6h Day
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyTimePreset('school')}
+                    className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 hover:border-cyan-500 hover:text-cyan-300 text-slate-300 text-[11px] transition-all"
+                  >
+                    School Day 3.5h
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyTimePreset('mock')}
+                    className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 hover:border-cyan-500 hover:text-cyan-300 text-slate-300 text-[11px] transition-all"
+                  >
+                    Full Mock 8h
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyTimePreset('clear')}
+                    className="px-2 py-1 rounded-lg bg-slate-900/60 border border-slate-800 hover:text-rose-400 text-slate-500 text-[11px] transition-all"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
               {/* Time Breakdown (Section 8 Spec: Target, Available, Actual must not be conflated) */}
               <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
                 <div className="text-xs font-mono font-bold text-slate-300 uppercase mb-3 flex items-center justify-between">
                   <span>Three-Layer Study Time (Hours)</span>
-                  <span className="text-[10px] text-cyan-400 font-normal">Section 8 Rule: Never conflate</span>
+                  <div className="flex items-center gap-3">
+                    {parseFloat(sumDetailedHours) > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleAutoSumHours}
+                        className="text-[11px] font-mono text-cyan-400 hover:text-cyan-300 underline font-normal"
+                      >
+                        ⚡ Sum Details into Actual ({sumDetailedHours}h)
+                      </button>
+                    )}
+                    <span className="text-[10px] text-cyan-400 font-normal">Section 8 Rule: Never conflate</span>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 text-xs font-mono">
                   <div>
@@ -618,8 +637,28 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
 
               {/* Questions Data */}
               <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
-                <div className="text-xs font-mono font-bold text-slate-300 uppercase mb-3">
-                  Questions Attempted & Accuracy
+                <div className="text-xs font-mono font-bold text-slate-300 uppercase mb-3 flex items-center justify-between">
+                  <span>Questions Attempted & Accuracy</span>
+                  <div className="flex items-center gap-2">
+                    {liveAccuracy !== null && (
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                        liveAccuracy >= 75 ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                        liveAccuracy >= 50 ? 'bg-cyan-950 text-cyan-300 border border-cyan-800' :
+                        'bg-amber-950 text-amber-300 border border-amber-800'
+                      }`}>
+                        🎯 Accuracy: {liveAccuracy}% ({corNum}/{attNum})
+                      </span>
+                    )}
+                    {attNum > 0 && corNum > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleAutoWrong}
+                        className="text-[11px] font-mono text-cyan-400 hover:text-cyan-300 underline font-normal"
+                      >
+                        Auto-Compute Wrong ({calcWrong})
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs font-mono">
                   <div>
@@ -670,224 +709,13 @@ export const DailyLogView: React.FC<DailyLogViewProps> = ({
                 </div>
               </div>
 
-              {/* Physical Notebook Mistake Analysis & OCR Stage */}
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
-                      <Camera className="w-4 h-4 text-cyan-400" />
-                      Physical Mistake Notebook Image & AI Extraction
-                    </h3>
-                    <p className="text-xs text-slate-400 font-mono">
-                      Digitizes metacognitive reflections, not raw questions (Section 11 Spec)
-                    </p>
-                  </div>
-                  
-                  <button
-                    type="button"
-                    onClick={handleRunAiExtraction}
-                    disabled={isExtracting}
-                    className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-mono text-xs font-semibold flex items-center gap-2 shadow-md shadow-purple-900/30 transition-all disabled:opacity-50"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    {isExtracting ? 'Extracting...' : 'Extract Errors via AI'}
-                  </button>
-                </div>
-
-                {/* Photo Upload and Capture */}
-                <div className="space-y-3 font-mono text-xs">
-                  <div>
-                    <label className="text-slate-400 block mb-1">Upload Notebook Mistake Photo (or take photo):</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageFileChange}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-300 text-xs file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-cyan-300 hover:file:bg-slate-700"
-                    />
-                  </div>
-
-                  {uploadedImageBase64 && (
-                    <div className="relative inline-block border border-slate-700 rounded-lg overflow-hidden bg-slate-900">
-                      <img 
-                        src={uploadedImageBase64} 
-                        alt="Uploaded notebook page" 
-                        className="max-h-36 max-w-full object-contain rounded" 
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setUploadedImageBase64(null)}
-                        className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-black/70 text-slate-300 hover:text-rose-400 text-[10px]"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {extractionError && (
-                  <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs font-mono flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                    <span>{extractionError}</span>
-                  </div>
-                )}
-
-                {/* Optional free-text handwritten transcription */}
-                <div>
-                  <label className="text-slate-400 block text-xs font-mono mb-1">
-                    Or Type Handwritten Notes Directly:
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={rawTextNote}
-                    onChange={(e) => setRawTextNote(e.target.value)}
-                    placeholder="e.g. Q.14 Rotational Motion: Forgot friction provides torque about CM. Wrote a = g sinθ without (1 + I/mR²)."
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs font-mono text-slate-200 focus:border-cyan-500 focus:outline-none"
-                  />
-                </div>
-
-                {/* Human Confirmation Table (Section 34 Spec: Human confirmation mandatory) */}
-                <div className="pt-3 border-t border-slate-800">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-mono font-bold text-slate-200 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      Human Confirmation & Review Table ({extractedErrors.length} records)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleAddManualError}
-                      className="text-[11px] font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Add Custom Error
-                    </button>
-                  </div>
-
-                  {extractedErrors.length === 0 ? (
-                    <div className="p-4 text-center bg-slate-900/40 rounded-lg border border-dashed border-slate-800 text-xs font-mono text-slate-500">
-                      No errors extracted yet. Click "Extract Errors via AI" or select a preset to populate.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {extractedErrors.map((err, idx) => (
-                        <div key={idx} className="p-3 bg-slate-900 rounded-lg border border-slate-700/80 text-xs font-mono space-y-2">
-                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                            <select
-                              value={err.subject}
-                              onChange={(e) => {
-                                const newSubj = e.target.value as 'Physics' | 'Chemistry' | 'Mathematics';
-                                handleUpdateExtractedField(idx, 'subject', newSubj);
-                                const firstChap = CANONICAL_CURRICULUM[newSubj]?.[0];
-                                if (firstChap) {
-                                  handleUpdateExtractedField(idx, 'chapter', firstChap.chapter);
-                                  handleUpdateExtractedField(idx, 'concept', firstChap.concepts[0] || 'General Concept');
-                                }
-                              }}
-                              className="bg-slate-950 border border-slate-700 rounded p-1 text-slate-200"
-                            >
-                              <option value="Physics">Physics</option>
-                              <option value="Chemistry">Chemistry</option>
-                              <option value="Mathematics">Mathematics</option>
-                            </select>
-
-                            <select
-                              value={err.chapter}
-                              onChange={(e) => {
-                                const newChap = e.target.value;
-                                handleUpdateExtractedField(idx, 'chapter', newChap);
-                                const chapObj = CANONICAL_CURRICULUM[err.subject]?.find(c => c.chapter === newChap);
-                                if (chapObj && chapObj.concepts.length > 0) {
-                                  handleUpdateExtractedField(idx, 'concept', chapObj.concepts[0]);
-                                }
-                              }}
-                              className="bg-slate-950 border border-slate-700 rounded p-1 text-slate-200 truncate"
-                            >
-                              {CANONICAL_CURRICULUM[err.subject]?.map(c => (
-                                <option key={c.chapter} value={c.chapter}>{c.chapter}</option>
-                              ))}
-                            </select>
-
-                            <select
-                              value={err.errorType}
-                              onChange={(e) => handleUpdateExtractedField(idx, 'errorType', e.target.value)}
-                              className="bg-slate-950 border border-slate-700 rounded p-1 text-cyan-300 font-semibold"
-                            >
-                              <option value="concept">Concept Gap</option>
-                              <option value="application">Application Gap</option>
-                              <option value="execution">Execution Error</option>
-                              <option value="selection">Selection Error</option>
-                            </select>
-
-                            <div className="flex items-center gap-2">
-                              <select
-                                value={err.confidenceLevel}
-                                onChange={(e) => handleUpdateExtractedField(idx, 'confidenceLevel', e.target.value)}
-                                className="bg-slate-950 border border-slate-700 rounded p-1 text-slate-200 flex-1 text-[11px]"
-                              >
-                                <option value="wrong_confident">Wrong + Confident (Misconception)</option>
-                                <option value="wrong_uncertain">Wrong + Uncertain</option>
-                                <option value="correct_confident">Correct + Confident</option>
-                                <option value="correct_uncertain">Correct + Uncertain (Lucky)</option>
-                              </select>
-
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveExtractedError(idx)}
-                                className="p-1 text-slate-400 hover:text-rose-400"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <div>
-                              <input
-                                list={`concepts-${idx}`}
-                                type="text"
-                                value={err.concept}
-                                placeholder="Concept (choose or type)"
-                                onChange={(e) => handleUpdateExtractedField(idx, 'concept', e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-cyan-300 text-xs"
-                              />
-                              <datalist id={`concepts-${idx}`}>
-                                {CANONICAL_CURRICULUM[err.subject]
-                                  ?.find(c => c.chapter === err.chapter)
-                                  ?.concepts.map((cpt, i) => (
-                                    <option key={i} value={cpt} />
-                                  ))}
-                              </datalist>
-                            </div>
-                            <input
-                              type="text"
-                              value={err.description}
-                              placeholder="What went wrong (reflection)?"
-                              onChange={(e) => handleUpdateExtractedField(idx, 'description', e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-slate-200"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                            <input
-                              type="text"
-                              value={err.whyItHappened}
-                              placeholder="Why it happened"
-                              onChange={(e) => handleUpdateExtractedField(idx, 'whyItHappened', e.target.value)}
-                              className="bg-slate-950 border border-slate-700 rounded p-1 text-amber-300"
-                            />
-                            <input
-                              type="text"
-                              value={err.correctUnderstanding}
-                              placeholder="Correct understanding / repair action"
-                              onChange={(e) => handleUpdateExtractedField(idx, 'correctUnderstanding', e.target.value)}
-                              className="bg-slate-950 border border-slate-700 rounded p-1 text-emerald-300"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+              {/* Diagnostic Mistake & Error Vault Logger (Zero-AI Dependent, 100% Reliable) */}
+              <DiagnosticMistakeLogger
+                errors={sessionErrors}
+                onErrorsChange={setSessionErrors}
+                attachedPhoto={uploadedImageBase64}
+                onAttachPhoto={setUploadedImageBase64}
+              />
 
               {/* Submit Buttons */}
               <div className="pt-4 border-t border-slate-800 flex items-center justify-between">

@@ -234,7 +234,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         
         {/* Widget 1: Today's Daily Study Goals Tracker */}
         <div className="lg:col-span-1">
-          <DailyGoalsTracker compact={true} onOpenDailyLog={onNavigateToDailyLog} />
+          <DailyGoalsTracker compact={true} onOpenDailyLog={onNavigateToDailyLog} userId={currentUser?.id} />
         </div>
 
         {/* Widget 2: 7-Session Practice Volume & Velocity Visualizer */}

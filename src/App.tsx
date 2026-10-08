@@ -36,8 +36,11 @@ export function App() {
 
   const [weeks, setWeeks] = useState<PreparationWeek[]>(() => {
     try {
-      const saved = localStorage.getItem('dijkstra_weeks');
-      return saved ? JSON.parse(saved) : INITIAL_WEEKS;
+      const savedAuth = localStorage.getItem('dijkstra_auth_session');
+      const userId = savedAuth ? JSON.parse(savedAuth)?.user?.id : null;
+      const key = userId ? `dijkstra_weeks_${userId}` : 'dijkstra_weeks';
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : (userId ? [] : INITIAL_WEEKS);
     } catch {
       return INITIAL_WEEKS;
     }
@@ -47,10 +50,13 @@ export function App() {
 
   const [studyDays, setStudyDays] = useState<StudyDay[]>(() => {
     try {
-      const saved = localStorage.getItem('dijkstra_days');
-      return saved ? JSON.parse(saved) : INITIAL_STUDY_DAYS;
+      const savedAuth = localStorage.getItem('dijkstra_auth_session');
+      const userId = savedAuth ? JSON.parse(savedAuth)?.user?.id : null;
+      const key = userId ? `dijkstra_days_${userId}` : 'dijkstra_days';
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : (userId ? [] : INITIAL_STUDY_DAYS);
     } catch {
-      return INITIAL_STUDY_DAYS;
+      return [];
     }
   });
 
@@ -61,22 +67,24 @@ export function App() {
   // CSV Modal State
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
 
-  // Sync to localStorage
+  // Sync to per-user localStorage
   useEffect(() => {
     try {
-      localStorage.setItem('dijkstra_weeks', JSON.stringify(weeks));
+      const key = authSession?.user?.id ? `dijkstra_weeks_${authSession.user.id}` : 'dijkstra_weeks';
+      localStorage.setItem(key, JSON.stringify(weeks));
     } catch (e) {
       console.warn('Failed to save weeks to localStorage:', e);
     }
-  }, [weeks]);
+  }, [weeks, authSession]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('dijkstra_days', JSON.stringify(studyDays));
+      const key = authSession?.user?.id ? `dijkstra_days_${authSession.user.id}` : 'dijkstra_days';
+      localStorage.setItem(key, JSON.stringify(studyDays));
     } catch (e) {
       console.warn('Failed to save days to localStorage:', e);
     }
-  }, [studyDays]);
+  }, [studyDays, authSession]);
 
   // Modals
   const [isNewDayModalOpen, setIsNewDayModalOpen] = useState(false);
@@ -417,7 +425,20 @@ export function App() {
 
   // Auth Gate: Require username/password login before accessing data
   if (!authSession) {
-    return <AuthScreen onAuthenticated={(session) => setAuthSession(session)} />;
+    return (
+      <AuthScreen 
+        onAuthenticated={(session) => {
+          setAuthSession(session);
+          try {
+            localStorage.setItem('dijkstra_auth_session', JSON.stringify(session));
+            const savedDays = localStorage.getItem(`dijkstra_days_${session.user.id}`);
+            setStudyDays(savedDays ? JSON.parse(savedDays) : []);
+            const savedWeeks = localStorage.getItem(`dijkstra_weeks_${session.user.id}`);
+            if (savedWeeks) setWeeks(JSON.parse(savedWeeks));
+          } catch {}
+        }} 
+      />
+    );
   }
 
   return (
@@ -460,6 +481,7 @@ export function App() {
             onSaveDay={handleSaveDay}
             isModalOpen={isNewDayModalOpen}
             setIsModalOpen={setIsNewDayModalOpen}
+            currentUser={authSession.user}
           />
         )}
 

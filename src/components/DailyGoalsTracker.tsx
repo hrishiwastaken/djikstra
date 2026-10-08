@@ -21,29 +21,34 @@ interface DailyGoalsTrackerProps {
   compact?: boolean;
   onTasksChange?: (tasks: DailyTask[]) => void;
   onOpenDailyLog?: () => void;
+  userId?: string;
 }
-
-const STORAGE_KEY = 'dijkstra_daily_goals';
 
 export const DailyGoalsTracker: React.FC<DailyGoalsTrackerProps> = ({
   selectedDate: propDate,
   onDateChange,
   compact = false,
   onTasksChange,
-  onOpenDailyLog
+  onOpenDailyLog,
+  userId
 }) => {
   const todayStr = new Date().toISOString().split('T')[0];
   const [activeDate, setActiveDate] = useState<string>(propDate || todayStr);
+  const storageKey = userId ? `dijkstra_daily_goals_${userId}` : 'dijkstra_daily_goals';
 
-  // All goals grouped by date
+  // All goals grouped by date (per account)
   const [goalsByDate, setGoalsByDate] = useState<Record<string, DailyTask[]>>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey);
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.warn('Failed to parse daily goals from localStorage:', e);
     }
-    // Default initial tasks for today
+    // New user starts completely clean (zero goals on database on creation)
+    if (userId) {
+      return {};
+    }
+    // Demo starter tasks for unauthenticated view
     return {
       [todayStr]: [
         {
@@ -77,6 +82,20 @@ export const DailyGoalsTracker: React.FC<DailyGoalsTrackerProps> = ({
     };
   });
 
+  // Reload when userId changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        setGoalsByDate(JSON.parse(saved));
+      } else if (userId) {
+        setGoalsByDate({});
+      }
+    } catch (e) {
+      console.warn('Failed to reload goals for user:', e);
+    }
+  }, [storageKey, userId]);
+
   // Active day's tasks
   const tasks = goalsByDate[activeDate] || [];
 
@@ -90,14 +109,14 @@ export const DailyGoalsTracker: React.FC<DailyGoalsTrackerProps> = ({
   // Sync to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(goalsByDate));
+      localStorage.setItem(storageKey, JSON.stringify(goalsByDate));
     } catch (e) {
       console.warn('Failed to save daily goals:', e);
     }
     if (onTasksChange) {
       onTasksChange(goalsByDate[activeDate] || []);
     }
-  }, [goalsByDate, activeDate]);
+  }, [goalsByDate, activeDate, storageKey]);
 
   useEffect(() => {
     if (propDate && propDate !== activeDate) {

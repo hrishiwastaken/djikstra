@@ -347,23 +347,21 @@ export const AISetupView: React.FC<AISetupViewProps> = ({ onSettingsSaved }) => 
           AI Model Provider & API Key Setup
         </h1>
         <p className="text-xs font-mono text-slate-400 mt-1 max-w-2xl leading-relaxed">
-          Dijkstra keeps AI providers completely replaceable. Submit external API keys below: one for standardized physical notebook OCR extraction, and one for deep longitudinal diagnostic reasoning.
+          Daily practice tracking and mistake taxonomy entry are 100% Zero-AI dependent (instant, zero quota limits, zero OCR errors). The Thinking Reasoning API key below powers the optional Weekly AI Diagnostic Synthesis Report.
         </p>
 
         {/* Global Key Status Badges */}
         <div className="mt-4 flex flex-wrap gap-3 font-mono text-xs">
-          <div className={`px-3 py-1.5 rounded-lg border flex items-center gap-2 ${
-            ocrConfigured ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300' : 'bg-amber-950/40 border-amber-800/60 text-amber-300'
-          }`}>
-            <Camera className="w-3.5 h-3.5" />
-            <span>OCR Model: <strong>{ocrConfigured ? 'Configured & Active' : 'Key Required'}</strong></span>
+          <div className="px-3 py-1.5 rounded-lg border flex items-center gap-2 bg-emerald-950/40 border-emerald-800/60 text-emerald-300">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Daily Mistake Logger: <strong>100% Instant (Zero AI / OCR Required)</strong></span>
           </div>
 
           <div className={`px-3 py-1.5 rounded-lg border flex items-center gap-2 ${
             thinkingConfigured ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300' : 'bg-amber-950/40 border-amber-800/60 text-amber-300'
           }`}>
             <Cpu className="w-3.5 h-3.5" />
-            <span>Thinking Model: <strong>{thinkingConfigured ? 'Configured & Active' : 'Key Required'}</strong></span>
+            <span>Weekly Thinking Model: <strong>{thinkingConfigured ? 'Configured & Active' : 'Key Optional'}</strong></span>
           </div>
         </div>
       </div>

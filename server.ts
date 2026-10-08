@@ -91,11 +91,11 @@ function createCleanUserScope(): UserScopeData {
         title: 'Cycle 1 (Fresh Preparation Cycle)',
         startDate: new Date().toISOString().split('T')[0],
         endDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-        jeeDays: 3,
-        cetDays: 2,
+        jeeDays: 0,
+        cetDays: 0,
         allocationRatio: '3:2',
         benchmarkExam: 'JEE',
-        targetWeeklyHours: 30,
+        targetWeeklyHours: 0,
         status: 'active'
       }
     ],

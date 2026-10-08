@@ -183,7 +183,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex overflow-x-auto gap-1 border-t border-slate-800/80 scrollbar-none py-1">
         {[
           { id: 'dashboard', label: 'Executive Dashboard', icon: Sliders },
-          { id: 'daily-log', label: 'Daily Capture & OCR', icon: Clock },
+          { id: 'daily-log', label: 'Daily Log & Mistake Vault', icon: Clock },
           { id: 'weekly-report', label: 'Weekly AI Report', icon: Zap },
           { id: 'benchmark', label: 'Benchmark & Allocation', icon: CheckCircle2 },
           { id: 'curriculum', label: 'Curriculum & Error Vault', icon: GitFork },
